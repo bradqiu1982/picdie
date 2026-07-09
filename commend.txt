@@ -5,5 +5,7 @@
 #python labelme2coco.py ./Train ./TrainOut --labels emlcoc-label.txt
 #python labelme2coco.py ./Verify ./VerifyOut --labels emlcoc-label.txt
 
-#python create_coco_tf_record.py  --include_masks=False --image_dir=./TrainOut  --object_annotations_file=./TrainOut/annotations.json   --output_file_prefix=./PICDIETrain --num_shards=1
-#python create_coco_tf_record.py  --include_masks=False --image_dir=./VerifyOut  --object_annotations_file=./VerifyOut/annotations.json   --output_file_prefix=./PICDIEVerify --num_shards=1
+
+
+#python create_coco_tf_record.py  --include_masks=False --image_dir=./TrainOut  --object_annotations_file=./TrainOut/annotations.json   --output_file_prefix=./ORIONTrain --num_shards=1
+#python create_coco_tf_record.py  --include_masks=False --image_dir=./VerifyOut  --object_annotations_file=./VerifyOut/annotations.json   --output_file_prefix=./ORIONVerify --num_shards=1

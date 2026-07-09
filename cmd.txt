@@ -1,0 +1,100 @@
+800G_OSFP_DR8_SIPH_WUXI
+
+
+python PICDIE_AOI.py  --gpuid 0  --modnum  8 --runid  0 
+
+python PICDIE_AOI.py  --gpuid 1  --modnum  8 --runid  1 
+
+python PICDIE_AOI.py  --gpuid 2  --modnum  8 --runid  2 
+
+python PICDIE_AOI.py  --gpuid 1  --modnum  8 --runid  3 
+
+python PICDIE_AOI.py  --gpuid 0  --modnum  8 --runid  4 
+
+python PICDIE_AOI.py  --gpuid 3  --modnum  8 --runid  5 --modnum2  2 --runid2  0
+
+python PICDIE_AOI.py  --gpuid 1  --modnum  8 --runid  5 --modnum2  2 --runid2  1
+
+python PICDIE_AOI.py  --gpuid 2  --modnum  8 --runid  6 
+
+python PICDIE_AOI.py  --gpuid 0  --modnum  8 --runid  7
+
+python PICDIE_AOIx.py  --gpuid 2  --modnum  1 --runid 0
+
+
+
+python PICDIE_AOI.py  --gpuid 0  --modnum  8 --runid  0  --modnum2  2 --runid2  0
+python PICDIE_AOI.py  --gpuid 1  --modnum  8 --runid  0  --modnum2  2 --runid2  1
+
+python PICDIE_AOI.py  --gpuid  0  --modnum  8 --runid  1 
+
+python PICDIE_AOI.py  --gpuid  0  --modnum  8 --runid  2  --modnum2  2 --runid2  0
+python PICDIE_AOI.py  --gpuid  1  --modnum  8 --runid  2  --modnum2  2 --runid2  1
+
+
+python PICDIE_AOI.py  --gpuid  1  --modnum  8 --runid  3
+
+
+python PICDIE_AOI.py  --gpuid  0  --modnum  8 --runid  4  --modnum2  2 --runid2  0
+python PICDIE_AOI.py  --gpuid  2  --modnum  8 --runid  4  --modnum2  2 --runid2  1
+
+python PICDIE_AOI.py  --gpuid  2  --modnum  8 --runid  5  --modnum2  2 --runid2  0
+python PICDIE_AOI.py  --gpuid  1  --modnum  8 --runid  5  --modnum2  2 --runid2  1
+
+python PICDIE_AOI.py  --gpuid  2  --modnum  8 --runid  6 
+
+python PICDIE_AOI.py  --gpuid  2  --modnum  8 --runid  7
+
+
+python PICDIE_AOI.py  --gpuid  1  --modnum  8 --runid  1  --modnum2  2 --runid2  0
+python PICDIE_AOI.py  --gpuid  1  --modnum  8 --runid  1  --modnum2  2 --runid2  1
+
+python PICDIE_AOI.py  --gpuid  1  --modnum  8 --runid  2
+python PICDIE_AOI.py  --gpuid  2  --modnum  8 --runid  3
+python PICDIE_AOI.py  --gpuid  2  --modnum  8 --runid  4
+
+python PICDIE_AOI.py  --gpuid  3  --modnum  8 --runid  5
+python PICDIE_AOI.py  --gpuid  3  --modnum  8 --runid  7
+python PICDIE_AOI.py  --gpuid  3  --modnum  8 --runid  5  --modnum2  2 --runid2  1
+
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  0
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  1
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  2
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  3
+
+
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  1  --modnum2  4 --runid2  0
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  1  --modnum2  4 --runid2  1
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  1  --modnum2  4 --runid2  2
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  1  --modnum2  4 --runid2  3
+
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  3  --modnum2  2 --runid2  0
+python PICDIE_AOIx.py  --gpuid  0 --modnum  4 --runid  3  --modnum2  2 --runid2  1
+
+
+python PICDIE_AOIx.py  --gpuid  2 --modnum  8 --runid  4
+python PICDIE_AOIx.py  --gpuid  2 --modnum  8 --runid  5
+python PICDIE_AOIx.py  --gpuid  3 --modnum  8 --runid  6
+python PICDIE_AOIx.py  --gpuid  3 --modnum  8 --runid  7
+
+python SIPH_COC_VMI.py  --gpuid  3 --modnum  2 --runid  0
+python SIPH_COC_VMI.py  --gpuid  3 --modnum  2 --runid  1
+
+db["PICDIEAOI"].updateMany({$and:[{ Project: "2X400G_FR4_BBLC_SiPh" },{ AnalyzeTime: {$gte: ISODate("2025-09-16T00:00:01.455Z")}},{ AOIResult: "FAIL" },{ToBePath: { $regex: RegExp("_Modulator_") }}]},{$set:{Analyzed:0}})
+
+db["PICDIEAOI"].updateMany({$and:[{ Project: "2X400G_FR4_BBLC_SiPh" },{ AnalyzeTime: {$gte: ISODate("2025-09-16T00:00:01.455Z")}},{ AOIResult: "FAIL" },{ToBePath: { $regex: RegExp("19_RxPads") }}]},{$set:{Analyzed:0}})
+db["PICDIEAOI"].updateMany({$and:[{ Project: "2X400G_FR4_BBLC_SiPh" },{ AnalyzeTime: {$gte: ISODate("2025-09-16T00:00:01.455Z")}},{ AOIResult: "FAIL" },{ToBePath: { $regex: RegExp("35_Modulator") }}]},{$set:{Analyzed:0}})
+
+db["PICDIEAOI"].updateMany({$and:[{ Project: "2X400G_FR4_BBLC_SiPh" },{ AnalyzeTime: {$gte: ISODate("2025-09-16T00:00:01.455Z")}},{ AOIResult: "FAIL" },{MDRate:1},{ToBePath: { $regex: RegExp("_Modulator_") }}]},{$set:{Analyzed:0}})
+db["PICDIEAOI"].updateMany({$and:[{ Project: "2X400G_FR4_BBLC_SiPh" },{ AnalyzeTime: {$gte: ISODate("2025-09-16T00:00:01.455Z")}},{ AOIResult: "FAIL" },{MDRate:1},{ToBePath: { $regex: RegExp("_ModulatorPads_") }}]},{$set:{Analyzed:0}})
+
+
+db["PICDIEAOI"].updateMany({$and:[{ Wafer:"N38156.1-13E1" },{ AOIResult: "FAIL" },{ToBePath: { $regex: RegExp("_Waveguide_") }}]},{$set:{Analyzed:0}})
+
+db["PICDIEAOI"].updateMany({$and:[{ Wafer:"N38366.1-22H0" },{ CellPos:"06307" }]},{$set:{Analyzed:0}})
+
+db["PICDIEAOI"].updateMany({$and:[{ Wafer:"N38366.1-22H0" },{ CellPos:"06307" }]},{$set:{Analyzed:0}})
+
+db["PICDIEAOI"].updateMany({$and: [{ Wafer: "N38366.1-11F2" },{ AOIResult: "FAIL" },{ToBePath: { $regex: RegExp("_Waveguide_") }}]},{$set:{Analyzed:0}})
+
+

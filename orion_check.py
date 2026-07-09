@@ -283,48 +283,49 @@ def MainLoop():
 
 			print("loading test data..............")
 
-			data_root = pathlib.Path('./mydata/trainsrcdata/PICDIE/test3p')
+			data_root = pathlib.Path('./mydata/trainsrcdata/ORION/test1orf1')
 			all_image_paths = list(data_root.glob('*'))
 			all_image_paths = [str(path) for path in all_image_paths]
 
 			print("loading model files............")
 
-
-			export_dir = './mydata/trainmodels/ORION/exported_model_OR_8487xxxx'  #mp 8
-			
-
-			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8484xxxx'#1f  2f   1p 3f 3190  4f 5901
-			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8484xxxx1'#1f  2f   1p 3f 3195  4f 5917
-
-			
-			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_850xxxx'  #mp 3
-			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8484xxxx1'  #mp 9 #hp 0
-
-			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8484xxxx'  #mp 14
+			export_dir = './mydata/trainmodels/ORION/exported_model_OR_8484xxxx'#3f  1f 4199 2f 5863 2p  1p 13
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8484xxxx1'#3f  1f 4197 2f 5861 2p  1p 14
 
 
-			#export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_8218xxxxxxx'  #mp 42
-			#export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_8232xxxxxxx'  #mp 28
-			#export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_8236xxxxxxx0'  #mp 46
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8487xxxx'#3f  1f 4217 2f 5890 2p  1p 14
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8487xxxx1'#3f  1f 4214 2f 5890 2p  1p 14
+
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_850xxxx'#3f  1f 4202 2f 5901  2p  1p 15
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_850xxxx0'#3f  1f 4195 2f 5897 2p  1p 15
 
 
 
 
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8359xxx1'#1f 1830 2f  1057 1p 4 3f 3178  4f  5906
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8359xxx'#1f 1818 2f  1044  1p 4  3f 3177  4f 5915
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8450xxxx'#3f 1532 1f  2p 6 1p
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8450xxxx0'#3f 1535 1f 4116 2p 6 1p 14
+
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8458xxxx'#1f 1542 2f  2p 8
 
 
+			# export_dir = './mydata/trainmodels/ORION/exported_model_OR_8458xxxx1' 2p 11
 
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8352xxx0'#1f 1829  2f  1042  1p 2
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8359xxx1'#1f 1830//2809 2f  1057 1p 4 3f 943 2p 31
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8339xxx0'#1f 2822 2f    1p 2  3f 949  2p 125
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8352xxx0'#1f 1829//2802  2f  1042  1p 2 2p 28
 
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8339xxx'#1f 2793 2f   1p   3f 943 2p 30
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8364xxx'#1f 1812 2f  1050 2p 
+
+
+			#mix exported_model_OR_8359xxx1 exported_model_OR_8339xxx0 exported_model_OR_8352xxx0 2892
+
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8339xxx1'#1f 2783  2f    1p  3f 942
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8359xxx'#1f 1818// 2f  1044  1p 4
 			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8352xxx'#1f 1841   2f  1045 1p 6
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8364xxx'#1f 1812 2f  1050 
+			
 			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8359xxx0'#1f 1815 2f  1043
 
-
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8339xxx'#1f  2f   1p 4  3f
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8339xxx0'#1f  2f    1p 4  3f
-			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8339xxx1'#1f   2f    1p 2 3f
 
 
 			# export_dir = './mydata/trainmodels/PICDIE/exported_model_OR_8318xx'#1f 1555

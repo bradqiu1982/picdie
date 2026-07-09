@@ -38,7 +38,7 @@ def main():
         print("Output directory already exists:", args.output_dir)
         sys.exit(1)
     os.makedirs(args.output_dir)
-    os.makedirs(osp.join(args.output_dir, "JPEGImages"))
+    # os.makedirs(osp.join(args.output_dir, "JPEGImages"))
     if not args.noviz:
         os.makedirs(osp.join(args.output_dir, "Visualization"))
     print("Creating dataset:", args.output_dir)
@@ -97,7 +97,8 @@ def main():
         label_file = labelme.LabelFile(filename=filename)
 
         base = osp.splitext(osp.basename(filename))[0]
-        out_img_file = osp.join(args.output_dir, "JPEGImages", base + ".jpg")
+        # out_img_file = osp.join(args.output_dir, "JPEGImages", base + ".jpg")
+        out_img_file = osp.join(args.output_dir, base + ".jpg")
 
         img = labelme.utils.img_data_to_arr(label_file.imageData)
         imgviz.io.imsave(out_img_file, img)

@@ -14,7 +14,7 @@ import tensorflow as tf
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 gpus = tf.config.list_physical_devices('GPU')
-tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=3*1024)])
+tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=5*1024)])
 logical_gpus = tf.config.list_logical_devices('GPU')
 print(logical_gpus)
 
@@ -214,6 +214,7 @@ def GetObjectList(output_dict,score):
 
 
 
+
 def run_model(param):
 	print("   \r\n")
 	print(param.rawpath)
@@ -221,18 +222,21 @@ def run_model(param):
 	# newimgpath = param.rawpath
 	
 	upperpath = param.rawpath.upper()
-	
+
 	gamma = 0.9
 	if '_WAVEGUIDE_' in upperpath:
 		param.score = 0.4
 		gamma = 0.7
 
-	if '_MODULATOR_' in upperpath:
-		if '29_MODULATOR_' not in upperpath and '30_MODULATOR_' not in upperpath and '31_MODULATOR_' not in upperpath and '32_MODULATOR_' not in upperpath and '33_MODULATOR_' not in upperpath and '34_MODULATOR_' not in upperpath and '35_MODULATOR_' not in upperpath:
-			gamma = 1.0
+	# if '11_METALTRACE' in upperpath or '12_METALTRACE' in upperpath or '13_METALTRACE' in upperpath or '14_METALTRACE' in upperpath or '15_METALTRACE' in upperpath or '16_METALTRACE' in upperpath  or '17_METALTRACE' in upperpath:
+	# 	gamma = 1.1
 
-	if '74_MODULATORPADS_' in upperpath or '75_MODULATORPADS_' in upperpath or '76_MODULATORPADS_' in upperpath or '77_MODULATORPADS_' in upperpath or '78_MODULATORPADS_' in upperpath or '79_MODULATORPADS_' in upperpath or '80_MODULATORPADS_' in upperpath:
-		gamma = 1.0
+	# if '_MODULATOR_' in upperpath:
+	# 	if '29_MODULATOR_' not in upperpath and '30_MODULATOR_' not in upperpath and '31_MODULATOR_' not in upperpath and '32_MODULATOR_' not in upperpath and '33_MODULATOR_' not in upperpath and '34_MODULATOR_' not in upperpath and '35_MODULATOR_' not in upperpath:
+	# 		gamma = 1.0
+
+	# if '74_MODULATORPADS_' in upperpath or '75_MODULATORPADS_' in upperpath or '76_MODULATORPADS_' in upperpath or '77_MODULATORPADS_' in upperpath or '78_MODULATORPADS_' in upperpath or '79_MODULATORPADS_' in upperpath or '80_MODULATORPADS_' in upperpath:
+	# 	gamma = 1.0
 
 	newimgpath = param.rawpath.replace(".jpg","_0.jpg")
 	cimg = cv2.imread(param.rawpath,cv2.IMREAD_COLOR)
@@ -262,13 +266,17 @@ def run_model(param):
 	max1 = 0.0
 	max2 = 0.0
 	max3 = 0.0
+	mdrate = 0
 
 	if len(allscorelist1) > 0:
 		max1 = max(allscorelist1)
+		mdrate = mdrate + 1
 	if len(allscorelist2) > 0:
 		max2 = max(allscorelist2)
+		mdrate = mdrate + 1
 	if len(allscorelist3) > 0:
 		max3 = max(allscorelist3)
+		mdrate = mdrate + 1
 
 
 	if max1 != 0 and max1 >= max2 and max1 >= max3:
@@ -290,12 +298,20 @@ def run_model(param):
 				tscore = round(100.0*float(output_dict['detection_scores'][0][i]),2)
 				bbox = output_dict['detection_boxes'][0][i]
 				drawtangle2(bbox,clsidx,cimg,color,tscore)
-	cv2.imwrite(param.rawpath.replace("test","testout").replace('.jpg',ngsubfix),cimg,[cv2.IMWRITE_JPEG_QUALITY,100])
 
 	try:
 		os.remove(newimgpath)
 	except:
 		print('fail to remove file')
+
+	# if '_WAVEGUIDE_' in upperpath and ngsubfix != '_NG.jpg':
+	# 	run_model_waveguide11(param)
+	# else:
+	# 	ngsubfix = '_'+str(mdrate)+ngsubfix
+	# 	cv2.imwrite(param.rawpath.replace("test","testout").replace('.jpg',ngsubfix),cimg,[cv2.IMWRITE_JPEG_QUALITY,100])
+
+	ngsubfix = '_'+str(mdrate)+ngsubfix
+	cv2.imwrite(param.rawpath.replace("test","testout").replace('.jpg',ngsubfix),cimg,[cv2.IMWRITE_JPEG_QUALITY,100])
 
 def getRunID(filepath):
     try:
@@ -318,14 +334,23 @@ def MainLoop():
 
 			print("loading test data..............")
 
-			data_root = pathlib.Path('./mydata/trainsrcdata/PICDIE/test4')
+			data_root = pathlib.Path('./mydata/trainsrcdata/PICDIE/test1ms')
 			all_image_paths = list(data_root.glob('*'))
 			all_image_paths = [str(path) for path in all_image_paths]
 
 			print("loading model files............")
 
 
-			export_dir = './mydata/trainmodels/PICDIE/exported_model_B81_789'
+			#exported_model_B91_8030xxxxx#exported_model_B91_7865xxxxx#exported_model_B91_7925xxxxx 1421
+			#exported_model_B91_8030xxxxx#exported_model_B91_7865xxxxx#exported_model_B91_7925xxxxx 1424
+
+			export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_8218xxxxxxx'
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_7903xxxxx'
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_8030xxxxx'
+
+			# export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_788'
+
+			#export_dir = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_781xxx'
 			# ****export_dir = './mydata/trainmodels/PICDIE/exported_model_B81_sys01_795'
 			# export_dir = './mydata/trainmodels/PICDIE/exported_model_B81_sys01_788'
 			# *****export_dir = './mydata/trainmodels/PICDIE/exported_model_B51_sys01_786'
@@ -333,7 +358,12 @@ def MainLoop():
 			imported = tf.saved_model.load(export_dir)
 			model_fn = imported.signatures['serving_default']
 
-			export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B91_791'
+			export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B91_8232xxxxxxx'
+			# export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B91_7865xxxxx'
+
+			# export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_786x'
+
+			#export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B91_784' #overkill
 			# export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B81_789'
 			# export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B81_802'
 			# export_dir2 = './mydata/trainmodels/PICDIE/exported_model_B71_808'#14
@@ -345,7 +375,15 @@ def MainLoop():
 			model_fn2 = imported2.signatures['serving_default']
 
 			
-			export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_785'
+			export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_8236xxxxxxx0'
+			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_7925xxxxx'
+
+			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_781xxx'
+
+			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_778xxx'
+			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_785xx'
+			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_791'
+			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B91_sys01_786'
 			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B81_786'
 			# export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B81_sys01_789x'
 			# ***export_dir3 = './mydata/trainmodels/PICDIE/exported_model_B71_808'

@@ -35,12 +35,15 @@ import pymongo
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime, timedelta
+import gc
 
 HIGH = 1280
 WIDTH = 1280
 cache = dict()
 Ascore = 0.5
 pathdict = {}
+# DBCONNECTSTR = 'mongodb://NPI:NPI%40NPI@cnwx-engsys02:27017/?directConnection=true&authSource=NPITrace'
+DBCONNECTSTR = 'mongodb://NPI:NPI%40NPI@cnwx-sdwww03:27017/?directConnection=true&authSource=NPITrace'
 
 def random_colors(N, bright=True):
 	brightness = 1.0 if bright else 0.7
@@ -60,11 +63,15 @@ def random_colors(N, bright=True):
 	return retcolors
 
 
-
 def  getPICDIEModel():
 	PICDIEMODEL='PICDIEMODEL'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_B81_sys01_795'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8218xxxxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_7975xxxxxx0'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8084xxxxxx'
+
+
 		imported = tf.saved_model.load(export_dir)
 		model_fn = imported.signatures['serving_default']
 		cache[PICDIEMODEL] = model_fn
@@ -75,9 +82,12 @@ def  getPICDIEModel():
 def  getPICDIEModel2():
 	PICDIEMODEL='PICDIEMODEL2'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_B81_789'
-		# export_dir = './AOI/PIC_AOI/exported_model_B71_805'
-		# export_dir = './AOI/PIC_AOI/exported_model_B51_787'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8232xxxxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8009xxxxxx'
+		#export_dir = './AOI/PIC_AOI/exported_model_B91_7925xxxxx'
+
+	
 		imported = tf.saved_model.load(export_dir)
 		model_fn2 = imported.signatures['serving_default']
 		cache[PICDIEMODEL] = model_fn2
@@ -88,9 +98,12 @@ def  getPICDIEModel2():
 def  getPICDIEModel3():
 	PICDIEMODEL='PICDIEMODEL3'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_B81_786'
-		# export_dir = './AOI/PIC_AOI/exported_model_B71_808'
-		# export_dir = './AOI/PIC_AOI/exported_model_B52_765'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8236xxxxxxx0'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8003xxxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_B91_8012xxxxxx'
+
+
 		imported = tf.saved_model.load(export_dir)
 		model_fn3 = imported.signatures['serving_default']
 		cache[PICDIEMODEL] = model_fn3
@@ -98,20 +111,27 @@ def  getPICDIEModel3():
 	else:
 		return cache[PICDIEMODEL]
 
+
 class PICDIEITEM:
-	def __init__(self,aoikey,pj,wafer,cellpos,rawpath,tobepath,colors,score,model_fn,model_fn2,model_fn3):
+	def __init__(self,aoikey,pj,wafer,cellpos,rawpath,tobepath,colors,score,model_fn,model_fn2,model_fn3,uptime):
 		self.aoikey = aoikey
 		self.pj = pj
 		self.wafer = wafer
 		self.cellpos = cellpos
-		self.rawpath = rawpath
+		self.rawpath = rawpath.lower().replace('\\wux-fs','\\datacom-fs')
 		self.tobepath = tobepath
 		self.colors = colors
 		self.score = score
 		self.model_fn = model_fn
 		self.model_fn2 = model_fn2
 		self.model_fn3 = model_fn3
-		
+		self.uptime = uptime
+
+		self.newimgpath = ''	
+		self.cimgx = None
+		self.img_tensor = None
+
+
 class AOIRESTITEM:
 	def __init__(self,aoikey,pj,wafer,cellpos,tobepath,analyzepath,aoirest,maxscore,MDRate):
 		self.aoikey = aoikey
@@ -135,7 +155,21 @@ def getRunID(cellpos,modnum):
 		return 0
 	return idx
 
-def GetAOIItems(modnum,myrunid):
+def reverse_num(num):
+	return int(str(num)[::-1])
+
+def getRunID2(cellpos,modnum2):
+	idx = 0
+	try:
+		revnum = reverse_num(int(cellpos))
+		idx = revnum%modnum2
+	except:
+		print('exception cellpos in runid:'+cellpos)
+		return 0
+	return idx
+
+
+def GetAOIItems(modnum,myrunid,modnum2,myrunid2):
 	colors = random_colors(30)
 	model_fn = getPICDIEModel()
 	model_fn2 = getPICDIEModel2()
@@ -143,34 +177,21 @@ def GetAOIItems(modnum,myrunid):
 
 	AOIItemList = []
 	try:
-		start_date = datetime.utcnow() - timedelta(days=60)
+		start_date = datetime.utcnow() - timedelta(days=28)
 		# start_date = datetime(2025, 6, 30, 0, 0, 0, 0)
-		myclient = pymongo.MongoClient("mongodb://NPI:NPI%40NPI@cnwx-engsys02:27017/?directConnection=true&authSource=NPITrace")
+		myclient = pymongo.MongoClient(DBCONNECTSTR)
 		mydb = myclient["NPITrace"]
 
 		# piccol = mydb["PICVM"]
 		# query = {'$and':[{'Project':'2X400G_FR4_BBLC_SiPh'},{'TestTime':{'$gte':start_date}},{'DieImgCnt':94},{'SKAnalyzed':0}]}
 		# waferlist = piccol.distinct('Wafer',query)
+		waferlist = ['N37167.1-15D4','N46276.1-25H1','N46276.1-25H1','N46276.1-25H1','N46629.1-11E4','N46629.1-11E4','N46629.1-11E4','N46629.1-11E4','N46629.1-11E4','N48334.1-06C5','N48334.1-14G2','N48334.1-14G2','N48334.1-24B2','N48334.1-24B2','N48334.1-24B2','N48334.1-24B2','N48336.1-06E2','N48336.1-15H2','N48336.1-16G5','N48336.1-16G5','N48336.1-21E6','N48336.1-21E6','N48336.1-25C2','N48337.1-01E4','N48337.1-13F5','N48337.1-15E3','N48337.1-17D1','N48337.1-17D1','N48337.1-20C4','N48497.1-01H0','N48497.1-02G3','N48497.1-13A6','N48497.1-13A6','N48497.1-13A6','N48497.1-14A1','N48497.1-22D6','N48497.1-23D1','N48497.1-23D1','N48497.1-25B7','N48498.1-04C2','N48498.1-07A3','N48498.1-07A3','N48498.1-17C6','N48499.1-18G5','N48499.1-19G0','N48522.1-16F0','N48523.1-10F7','N48523.1-19A2','N48523.1-25F1','N48752.1-09G2','N48752.1-09G2','N48752.1-09G2','N48752.1-09G2','N48752.1-12F5','N48752.1-12F5','N48752.1-23A0']
 
-		# waferlist = ['N37167.1-22A3']
-		# aoicol = mydb["PICDIEAOI"]
-		# query = {'$and':[{'Project':'2X400G_FR4_BBLC_SiPh'},{'Wafer':{'$in':waferlist}},{'Analyzed':0}]}
-		# field = {'_id':1,'Project':1,'Wafer':1,'CellPos':1,'RawPath':1,'ToBePath':1}
-		# for x in aoicol.find(query,field).sort({'Wafer':1}):
-		# 	if '.JPG' in x['RawPath'].upper() or '.PNG' in x['RawPath'].upper():
-		# 		cellpos = x['CellPos']
-		# 		# runid = getRunID(cellpos)
-		# 		# if runid != MYRUNID:
-		# 		# 	continue
-		#		# if len(x['Wafer']) > 14:
-		#		# 	continue
-		# 		item = PICDIEITEM(str(x['_id']),x['Project'],x['Wafer'],cellpos,x['RawPath'],x['ToBePath'],colors,Ascore,model_fn,model_fn2,model_fn3)
-		# 		AOIItemList.append(item)
 
 		aoicol = mydb["PICDIEAOI"]
-		query = {'$and':[{'Project':'2X400G_FR4_BBLC_SiPh'},{'AnalyzeTime':{'$gte':start_date}},{'Analyzed':0},{'AOIResult':{'$ne':''}}]}
-		field = {'_id':1,'Project':1,'Wafer':1,'CellPos':1,'RawPath':1,'ToBePath':1}
-		for x in aoicol.find(query,field).sort({'Wafer':1}):
+		query = {'$and':[{'Project':'2X400G_FR4_BBLC_SiPh'},{'Wafer':{'$in':waferlist}},{'Analyzed':{'$in':[3]}}]}
+		field = {'_id':1,'Project':1,'Wafer':1,'CellPos':1,'RawPath':1,'ToBePath':1,'UpdateTime':1}
+		for x in aoicol.find(query,field):
 			if '.JPG' in x['RawPath'].upper() or '.PNG' in x['RawPath'].upper():
 				cellpos = x['CellPos']
 				runid = getRunID(cellpos,modnum)
@@ -178,35 +199,86 @@ def GetAOIItems(modnum,myrunid):
 					continue
 				if len(x['Wafer']) > 14:
 					continue
-				item = PICDIEITEM(str(x['_id']),x['Project'],x['Wafer'],cellpos,x['RawPath'],x['ToBePath'],colors,Ascore,model_fn,model_fn2,model_fn3)
-				AOIItemList.append(item)
 
+				if modnum2 != 0:
+					runid2 = getRunID2(cellpos,modnum2)
+					if runid2 != myrunid2:
+						continue
+				
+				fileexist = os.path.exists(x['RawPath'])
+				fileexist2 = os.path.exists(x['ToBePath'])
+				if not fileexist and not fileexist2:
+					continue
+
+				item = PICDIEITEM(str(x['_id']),x['Project'],x['Wafer'],cellpos,x['RawPath'],x['ToBePath'],colors,Ascore,model_fn,model_fn2,model_fn3,x['UpdateTime'])
+				AOIItemList.append(item)
 	except:
 		print('a database except happend................')
 		time.sleep(5)
+		
+	AOIItemList.sort(key=lambda x: x.uptime)
 	return AOIItemList
 
 
-
 def drawtangle2(box,cls,cimg,color,tscore):
-	ymin = int(box[0])
-	xmin = int(box[1])
-	ymax = int(box[2])
-	xmax = int(box[3])
 
-	cv2.rectangle(cimg,(xmin-1,ymin-1),(xmax+1,ymax+1),(0,0,255),2)
+	ymin = int(box[0]*2048/1280)
+	xmin = int(box[1]*2448/1280)
+	ymax = int(box[2]*2048/1280)
+	xmax = int(box[3]*2448/1280)
+
+	xwidth = int(float(xmax-xmin)/120.0*40.0)
+	yheight = int(float(ymax-ymin)/120.0*40.0)
+
+	left = xmin-10
+	right = xmax+10
+	up = ymin-10
+	down = ymax+10
+	if left < 0:
+		left = 0
+	if right > 2448:
+		right = 2448
+	if up < 0:
+		up = 0
+	if down > 2048:
+		down = 2048
+
+	cv2.rectangle(cimg,(left,up),(right,down),(0,0,255),1)
 
 	ref_dict = {}
-	ref_dict[0] = 'ng'
-	ref_dict[1] = 'pd'
-	ref_dict[2] = 'wd'
+	ref_dict[0] = 'NG'
+	ref_dict[1] = 'PD'
+	ref_dict[2] = 'WD'
+
+	xmark = xmin+10
+	ymark = ymax+42
+
+	if xmax > 2200:
+		xmark = xmin-100
+	if ymax > 1900:
+		ymark = ymin-100
+	cv2.putText(cimg,ref_dict[int(cls)]+','+str(xwidth)+','+str(yheight),(xmark,ymark),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),2)
+
+
+# def drawtangle2(box,cls,cimg,color,tscore):
+# 	ymin = int(box[0])
+# 	xmin = int(box[1])
+# 	ymax = int(box[2])
+# 	xmax = int(box[3])
+
+# 	cv2.rectangle(cimg,(xmin-1,ymin-1),(xmax+1,ymax+1),(0,0,255),2)
+
+# 	ref_dict = {}
+# 	ref_dict[0] = 'ng'
+# 	ref_dict[1] = 'pd'
+# 	ref_dict[2] = 'wd'
 	
-	if xmax < 300:
-		cv2.putText(cimg,ref_dict[int(cls)],(xmin+20,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),1)
-		cv2.putText(cimg,str(tscore)+','+str(xmax-xmin)+','+str(ymax-ymin),(xmin+60,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,0.8,(0,0,255),1)
-	else:
-		cv2.putText(cimg,ref_dict[int(cls)],(xmin-160,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),1)
-		cv2.putText(cimg,str(tscore)+','+str(xmax-xmin)+','+str(ymax-ymin),(xmin-120,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,0.8,(0,0,255),1)
+# 	if xmax < 300:
+# 		cv2.putText(cimg,ref_dict[int(cls)],(xmin+20,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),1)
+# 		cv2.putText(cimg,str(tscore)+','+str(xmax-xmin)+','+str(ymax-ymin),(xmin+60,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,0.8,(0,0,255),1)
+# 	else:
+# 		cv2.putText(cimg,ref_dict[int(cls)],(xmin-160,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),1)
+# 		cv2.putText(cimg,str(tscore)+','+str(xmax-xmin)+','+str(ymax-ymin),(xmin-120,ymax+36),cv2.FONT_HERSHEY_SIMPLEX,0.8,(0,0,255),1)
 
 
 def gamma_correction(img, gamma=1.0):
@@ -238,7 +310,10 @@ def SaveTobeImg(cimg,param):
 		fps = filepath.split("/")
 	fn = fps[len(fps)-1]
 
-	basepath = '\\\\WUX-FS\\Datacom_Test_Data02\\WUXI_AI\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	# basepath = '\\\\WUX-FS\\Datacom_Test_Data02\\WUXI_AI\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	# basepath = '\\\\WUX-FS\\Datacom_Test_Data03\\WUXI_AI02\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	basepath = '\\\\cnwx-cifs\\Datacom_Test_Data03\\WUXI_AI02\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+
 	waferpath = basepath+param.wafer
 	try:
 		if waferpath not in pathdict:
@@ -287,7 +362,10 @@ def SaveAnalyzedImg(cimg,param,NGsubfix):
 		fps = filepath.split("/")
 	fn = fps[len(fps)-1]
 
-	basepath = '\\\\WUX-FS\\Datacom_Test_Data02\\WUXI_AI\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	# basepath = '\\\\WUX-FS\\Datacom_Test_Data02\\WUXI_AI\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	# basepath = '\\\\WUX-FS\\Datacom_Test_Data03\\WUXI_AI02\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	basepath = '\\\\cnwx-cifs\\Datacom_Test_Data03\\WUXI_AI02\\AOI\\PICAOI\\2X400G_FR4_BBLC_SiPh\\'
+	
 	waferpath = basepath+param.wafer
 	try:
 		if waferpath not in pathdict:
@@ -322,7 +400,7 @@ def SaveAnalyzedImg(cimg,param,NGsubfix):
 	# 	return ''
 
 	try:
-		newimgpath = rawpath+'\\'+param.cellpos+'_'+fn
+		newimgpath = rawpath+'\\'+param.cellpos+'_'+fn.lower()
 		newimgpath = newimgpath.replace(".jpg",NGsubfix)
 		cv2.imwrite(newimgpath,cimg)
 		return newimgpath
@@ -409,7 +487,7 @@ def checkboxdist(boxlist,distthold1=60,distthold2=140):
 				return True
 	return False
 
-def AroundWaveGuide(allngboxlist,output_dict,mdrate):
+def AroundWaveGuide(imgpath,allngboxlist,output_dict,mdrate):
 	boxlist = []
 	tempngboxlist = []
 
@@ -422,6 +500,10 @@ def AroundWaveGuide(allngboxlist,output_dict,mdrate):
 		yheight = ymax-ymin
 		xmid = (xmin+xmax)/2
 		ymid = (ymin+ymax)/2
+
+		if '2_AROUNDWAVEGUIDE' in imgpath or '3_AROUNDWAVEGUIDE' in imgpath:
+			if xmax < 380 and yheight > 120:
+				continue
 
 		if (ymin > 220 and ymin < 280) or (ymax > 220 and ymax < 280) or (ymid > 220 and ymid < 280):
 			if xwidth >= 35 or yheight >= 35:
@@ -452,6 +534,9 @@ def MetalTrace1(allngboxlist,output_dict,mdrate):
 				boxlist.append(objbox)
 			tempngboxlist.append(objbox)
 			continue
+
+	if CheckUpDownTraceSize(boxlist,tempngboxlist,600,1010):
+		return {},mdrate,[]
 
 	if len(boxlist) > 0:
 		return output_dict,mdrate,boxlist
@@ -490,10 +575,11 @@ def MetalTrace2(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 		avgwdymax = int(sumymax/sumcnt)
 
 	if avgwdymin != -1:
-		avbymin1 = avgwdymin-320
+		avbymin1 = avgwdymin-360
 		avbymax1 = avgwdymin-175
 		avbymin2 = avgwdymax+85
-		avbymax2 = avgwdymax+275
+		# avbymax2 = avgwdymax+275
+		avbymax2 = 1280
 
 		matchlinearea = False
 
@@ -648,6 +734,12 @@ def MetalTrace2(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 						tempngboxlist.append(objbox)
 						continue
 
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,avgwdymax+30,1280,40):
+			return {},mdrate,[]
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,0,avbymax1,40):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -723,7 +815,8 @@ def MetalTrace3(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 		avbymin1 = avgwdymin-320
 		avbymax1 = avgwdymin-175
 		avbymin2 = avgwdymax+85
-		avbymax2 = avgwdymax+275
+		#avbymax2 = avgwdymax+275
+		avbymax2 = 1280
 		matchlinearea = False
 
 		for objbox in allngboxlist:
@@ -825,6 +918,12 @@ def MetalTrace3(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 							boxlist.append(objbox)
 						tempngboxlist.append(objbox)
 						continue
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,avgwdymax+30,1280):
+			return {},mdrate,[]
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,0,avbymax1):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -928,6 +1027,10 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					boxlist.append(objbox)
 				tempngboxlist.append(objbox)
 				continue
+
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -990,6 +1093,9 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -1031,6 +1137,9 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					boxlist.append(objbox)
 				tempngboxlist.append(objbox)
 				continue
+		
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -1079,6 +1188,14 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 				tempngboxlist.append(objbox)
 				continue
 
+			if (xmin > 170 and xmin < 490) or (xmax > 170 and xmax < 490) or (xmid > 170 and xmid < 490):
+				if (xwidth >= 45 and yheight >= 45):
+					boxlist.append(objbox)
+				continue
+
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -1111,11 +1228,18 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 			if'39_MODULATOR' in imgpath and ((xwidth <=14 or (xwidth >= 1.8*yheight and yheight <= 30)) and ymid < 100):
 				continue
 
-			if (xmax > 1200) or ((xmin > 50 and xmin < 380) or (xmax > 50 and xmax < 380) or (xmid > 50 and xmid < 380)):
+			if (xmax > 1210) or ((xmin > 50 and xmin < 380) or (xmax > 50 and xmax < 380) or (xmid > 50 and xmid < 380)):
 				if (xwidth >= 35 and yheight >= 35) or (xwidth*yheight > 1200 and yheight >= 30):
 					boxlist.append(objbox)
 				tempngboxlist.append(objbox)
 				continue
+			elif (xmax > 1190) or ((xmin > 30 and xmin < 400) or (xmax > 30 and xmax < 400) or (xmid > 30 and xmid < 400)): 
+				if (xwidth >= 45 and yheight >= 45) or (xwidth > 30 and xwidth*yheight > 2000):
+					boxlist.append(objbox)
+				continue
+
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -1162,18 +1286,31 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+				elif  xmin < 300 or xmax > 1130:
+					if (xwidth >= 45 and yheight >= 45):
+						boxlist.append(objbox)
+					continue
+
 			elif '41_MODULATOR' in imgpath or '50_MODULATOR' in imgpath or '59_MODULATOR' in imgpath or '68_MODULATOR' in imgpath:
-				if xmin < 200 or xmax > 1010:
+				if xmin < 200 or xmax > 1050:
 					if (xwidth >= 35 and yheight >= 35) or (xwidth*yheight > 1200 and yheight >= 30):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
+					continue
+				elif  xmin < 220 or xmax > 1030:
+					if (xwidth >= 45 and yheight >= 45):
+						boxlist.append(objbox)
 					continue
 			elif  '42_MODULATOR' in imgpath or '49_MODULATOR' in imgpath or '60_MODULATOR' in imgpath or '67_MODULATOR' in imgpath:
-				if xmin < 100 or xmax > 940:
+				if xmin < 100 or xmax > 870:
 					if (xwidth >= 35 and yheight >= 35) or (xwidth*yheight > 1200 and yheight >= 30):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+		
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -1211,6 +1348,14 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					boxlist.append(objbox)
 				tempngboxlist.append(objbox)
 				continue
+
+			if (xmin > 840 and xmin < 1190) or (xmax > 840 and xmax < 1190) or (xmid > 840 and xmid < 1190):
+				if (xwidth >= 45 and yheight >= 45):
+					boxlist.append(objbox)
+				continue
+
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -1257,6 +1402,13 @@ def Modulator(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					boxlist.append(objbox)
 				tempngboxlist.append(objbox)
 				continue
+			elif (xmin > 760 and xmin < 1090) or (xmax > 760 and xmax < 1090) or (xmid > 760 and xmid < 1090):
+				if (xwidth >= 45 and yheight >= 45):
+					boxlist.append(objbox)
+				continue
+
+		if CheckModulatorDefectSize(boxlist,tempngboxlist,20):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -1289,6 +1441,7 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 
 	if avgpdymin != -1:
 
+
 		if '74_MODULATORPADS' in imgpath:
 			markpos = -1
 			for pdbox in allpdboxlist:
@@ -1311,7 +1464,11 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 			if markpos == -1:
 				markpos = 600
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -1320,6 +1477,14 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				yheight = ymax-ymin
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
+
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and int(yheight*0.5333) < 55:
+					continue
 
 				if (ymin < avgpdymin-385) and ((xmin > markpos-420 and xmin < markpos-130 ) or (xmax > markpos-420 and xmax < markpos-130) or (xmid > markpos-420 and xmid < markpos-130)):
 					if (xwidth >= 35 and yheight >= 35) or (xwidth*yheight > 1200 and yheight >= 30):
@@ -1349,13 +1514,22 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
 
 		if '75_MODULATORPADS' in imgpath:
 			markpos = -1
@@ -1378,7 +1552,11 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 			if markpos == -1:
 				markpos = 510
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -1387,6 +1565,15 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				yheight = ymax-ymin
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
+
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and  int(yheight*0.5333) < 55:
+					continue
+
 
 				if (ymin < avgpdymin-385) and ((xmin > markpos-425 and xmin < markpos-130 ) or (xmax > markpos-425 and xmax < markpos-130) or (xmid > markpos-425 and xmid < markpos-130)):
 					if (xwidth >= 35 and yheight >= 35) or (xwidth*yheight > 1200 and yheight >= 30):
@@ -1424,13 +1611,22 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
 
 		if '76_MODULATORPADS' in imgpath:
 			markpos = -1
@@ -1466,6 +1662,14 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				yheight = ymax-ymin
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
+
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and  int(yheight*0.5333) < 55:
+					continue
 
 				if xmax > 1270 and xwidth <= 20 and yheight >= 5*xwidth and score < 0.9:
 					continue
@@ -1509,13 +1713,22 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
 
 		if '77_MODULATORPADS' in imgpath:
 			markpos = -1
@@ -1549,11 +1762,19 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
 
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and  int(yheight*0.5333) < 55:
+					continue
+
 				if xmax > 1270 and xwidth <= 20 and yheight >= 5*xwidth and score < 0.9:
 					continue
 
 
-				if (ymin < avgpdymin-385) and ((xmin > markpos-425 and xmin < markpos-130 ) or (xmax > markpos-425 and xmax < markpos-130) or (xmid > markpos-425 and xmid < markpos-130)):
+				if (ymin < avgpdymin-385) and ((xmin > markpos-425 and xmin < markpos-110 ) or (xmax > markpos-425 and xmax < markpos-130) or (xmid > markpos-425 and xmid < markpos-130)):
 					if (xwidth >= 35 and yheight >= 35) or (xwidth*yheight > 1200 and yheight >= 30):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
@@ -1589,13 +1810,22 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
 
 		if '78_MODULATORPADS' in imgpath:
 			markpos = -1
@@ -1631,6 +1861,14 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				yheight = ymax-ymin
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
+
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and  int(yheight*0.5333) < 55:
+					continue
 
 				if xmax > 1230 and xwidth > 90 and yheight > 90 and score < 0.95:
 					continue
@@ -1671,13 +1909,23 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
+
 
 		if '79_MODULATORPADS' in imgpath:
 			markpos = -1
@@ -1713,6 +1961,14 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				yheight = ymax-ymin
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
+
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and  int(yheight*0.5333) < 55:
+					continue
 
 				if xmax > 1230 and xwidth > 90 and yheight > 90 and score < 0.96:
 					continue
@@ -1755,13 +2011,23 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+
+
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
 
 		if '80_MODULATORPADS' in imgpath:
 			markpos = -1
@@ -1798,6 +2064,14 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
 
+				if ymin >= avgpdymin and ymax < avgpdymax and ((xwidth <= 46 and yheight <= 46) or xwidth*yheight < 1500):
+					continue
+				if ymin >= avgpdymin and ymax < avgpdymax and (xmin < 15 or xmax > 1265) and xwidth < 30:
+					continue
+
+				if ymin >= avgpdymax and  int(yheight*0.5333) < 55:
+					continue
+
 				if xmax > 1230 and xwidth > 90 and yheight > 90 and score < 0.9:
 					continue
 
@@ -1833,13 +2107,28 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						continue
 
 
-				if ymid > avgpdymin and ymid < avgpdymax:
+				if ymid > avgpdymin and ymid < avgpdymax+10:
 					if (xwidth >= 50 and yheight >= 50) :
 						if CheckPadS(objbox,allpdboxlist):
 							boxlist.append(objbox)
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+					if xwidth > 100 and score > 0.9:
+						boxlist.append(objbox)
+						tempngboxlist.append(objbox)
+						continue
+				
+				if ymid > avgpdymax and ymid < avgpdymax+80 and xwidth*yheight > 60*60 and score > 0.9:
+					boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,0,avgpdymin-370,20):
+			return {},mdrate,[]
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,avgpdymin-370,1280,40):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -2091,6 +2380,12 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 						tempngboxlist.append(objbox)
 						continue
 
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,0,550,20):
+			return {},mdrate,[]
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,550,1280,40):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -2101,6 +2396,121 @@ def ModulatorPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscor
 
 	return {},mdrate,[]
 
+
+def rawWH(box):
+	ymin = int(box[0]*2048/1280)
+	xmin = int(box[1]*2448/1280)
+	ymax = int(box[2]*2048/1280)
+	xmax = int(box[3]*2448/1280)
+	xwidth = int(float(xmax-xmin)/120.0*40.0)
+	yheight = int(float(ymax-ymin)/120.0*40.0)
+	return xwidth,yheight
+
+
+def SameBox(boxlist,distthold1=25):
+	if len(boxlist) == 1:
+		return True
+
+	for box1 in boxlist:
+		for box2 in boxlist:
+			ymin1 = int(box1[0])
+			xmin1 = int(box1[1])
+			ymax1 = int(box1[2])
+			xmax1 = int(box1[3])
+
+			ymin2 = int(box2[0])
+			xmin2 = int(box2[1])
+			ymax2 = int(box2[2])
+			xmax2 = int(box2[3])
+
+			p = [int((xmin1+xmax1)/2),int((ymin1+ymax1)/2)]
+			q = [int((xmin2+xmax2)/2),int((ymin2+ymax2)/2)]
+			dist1 = math.dist(p,q)
+
+			# print('dist1: '+str(dist1)+'..........')
+
+			if dist1 > distthold1:
+				return False
+	return True
+
+
+def CheckLeftPadTraceSize(boxlist,tempngboxlist,bound,defectsize=40):
+
+	# print('boxlist len : '+str(len(boxlist))+'tempngboxlist len : '+str(len(tempngboxlist))+' bound '+str(bound)+'..................' )
+
+	if len(tempngboxlist) > 0 and SameBox(tempngboxlist):
+		if int(tempngboxlist[0][1]) > bound :
+			w = -1
+			h = -1
+			for box in tempngboxlist:
+				w1,h1 = rawWH(box)
+				if w1 > w:
+					w = w1
+				if h1 > h:
+					h = h1
+
+			# print('tw: '+ str(w) + ' h: '+str(h)+'..................')
+			if w <= defectsize and h <= defectsize: #and (w*w+h*h) < defectsize*defectsize:
+				return True
+
+	return False
+
+
+def CheckRightPadTraceSize(boxlist,tempngboxlist,bound,defectsize=40):
+	# print('boxlist len : '+str(len(boxlist))+' tempngboxlist len : '+str(len(tempngboxlist))+' bound '+str(bound)+'..................' )
+
+	if len(tempngboxlist) > 0 and SameBox(tempngboxlist):
+		if int(tempngboxlist[0][3]) < bound :
+			w = -1
+			h = -1
+			for box in tempngboxlist:
+				w1,h1 = rawWH(box)
+				if w1 > w:
+					w = w1
+				if h1 > h:
+					h = h1
+
+			# print('tw: '+ str(w) + ' h: '+str(h)+'..................')
+			if w <= defectsize and h <= defectsize: #and (w*w+h*h) < defectsize*defectsize:
+				return True
+
+	return False
+
+
+def CheckUpDownTraceSize(boxlist,tempngboxlist,ubound,dbound,defectsize=40):
+
+	if len(tempngboxlist) > 0 and SameBox(tempngboxlist):
+		if (int(tempngboxlist[0][0]) > ubound  and int(tempngboxlist[0][0]) < dbound) or (int(tempngboxlist[0][2]) > ubound  and int(tempngboxlist[0][2]) < dbound):
+			w = -1
+			h = -1
+			for box in tempngboxlist:
+				w1,h1 = rawWH(box)
+				if w1 > w:
+					w = w1
+				if h1 > h:
+					h = h1
+
+			# print('tw: '+ str(w) + ' h: '+str(h)+'..................')
+			if w <= defectsize and h <= defectsize: #and (w*w+h*h) < defectsize*defectsize:
+				return True
+	return False
+
+
+def CheckModulatorDefectSize(boxlist,tempngboxlist,defectsize=20):
+	if len(tempngboxlist) > 0 and SameBox(tempngboxlist):
+		w = -1
+		h = -1
+		for box in tempngboxlist:
+			w1,h1 = rawWH(box)
+			if w1 > w:
+				w = w1
+			if h1 > h:
+				h = h1
+
+		# print('tw: '+ str(w) + ' h: '+str(h)+'..................')
+		if w <= defectsize and h <= defectsize: #and (w*w+h*h) < defectsize*defectsize:
+			return True
+	return False
 
 def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 	sumcnt = 0
@@ -2146,7 +2556,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdhigh > 800:
 				markpos = pdhigh-155
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2181,11 +2595,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2201,7 +2618,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdhigh > 1100:
 				markpos = pdhigh-515
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2252,11 +2673,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					continue
 
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2272,7 +2696,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdlow < 130:
 				markpos = pdlow+730
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2303,11 +2731,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					continue
 
 				
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2337,7 +2768,7 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
 
-				if xmax > 1270 and xwidth <=22 and yheight >= 4.5*xwidth and score < 90:
+				if xmax > 1270 and xwidth <=22 and yheight >= 4.5*xwidth and score < 0.9:
 					continue
 
 				if (ymin < markpos+90) and (xmax > avgright+170):
@@ -2363,11 +2794,19 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+				if (xmid > avgleft-60 and xmid < avgright+40):
+					if (xwidth >= 60 and yheight >= 60):
+						boxlist.append(objbox)
+					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2383,7 +2822,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdhigh > 800:
 				markpos = pdhigh-160
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2423,11 +2866,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2445,7 +2891,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdhigh > 1000:
 				markpos = pdhigh-515
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2491,11 +2941,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					continue
 
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2511,7 +2964,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdhigh > 1150:
 				markpos = pdhigh-705
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2549,11 +3006,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2573,8 +3033,11 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdlow < 130:
 				markpos = pdlow+730
 
-
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2618,11 +3081,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2640,7 +3106,21 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 			if pdhigh > 880:
 				markpos = pdhigh-340
 
+
+			mdpadymax = -1
+			for pdbox in allpdboxlist:
+				pdymin1 = int(pdbox[0])
+				pdxmin1 = int(pdbox[1])
+				pdymax1 = int(pdbox[2])
+				pdxmax1 = int(pdbox[3])
+				if pdxmin1 > avgright+150:
+					mdpadymax = pdymax1
+
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -2649,6 +3129,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 				yheight = ymax-ymin
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
+
+				if mdpadymax != -1:
+					if ymin >= mdpadymax:
+						continue
+					if xmid <= avgright:
+						if ymid > mdpadymax -10:
+							continue
+
 
 				if (xmid > avgleft-105 and xmid <  avgleft -30) and (ymid > markpos+450 and ymid < markpos+580):
 					if (xwidth >= 45 and yheight >= 45):
@@ -2701,11 +3189,14 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-60 and xmid < avgright+40) and xwidth*yheight > minarea:
+				if (xmid > avgleft-60 and xmid < avgright+40) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,avgright):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2760,6 +3251,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2832,6 +3326,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -2879,6 +3376,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -2924,6 +3424,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -2981,6 +3484,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -3037,6 +3543,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -3087,6 +3596,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3143,6 +3655,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3214,6 +3729,9 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckLeftPadTraceSize(boxlist,tempngboxlist,400):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -3224,7 +3742,7 @@ def RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 
 	return {},mdrate,[]
 
-def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
+def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist):
 
 	sumcnt = 0
 	sumleft = 0
@@ -3269,7 +3787,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdhigh > 800:
 				markpos = pdhigh - 520
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3279,11 +3801,16 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
 
-				if (xmid > avgright+20 and xmid < avgright+100) and  (ymid > markpos-410 and ymid < markpos-240):
-						if (xwidth >= 45 and yheight >= 45):
-							boxlist.append(objbox)
-						tempngboxlist.append(objbox)
+				if (ymid > markpos-410 and ymid < markpos-240) and score > 0.985:
+					if (xwidth >= 45 and yheight >= 45):
+						boxlist.append(objbox)
 						continue
+
+				if (xmid > avgright+20 and xmid < avgright+100) and  (ymid > markpos-410 and ymid < markpos-240):
+					if (xwidth >= 45 and yheight >= 45):
+						boxlist.append(objbox)
+					tempngboxlist.append(objbox)
+					continue
 
 				if ymax > markpos+60 and ((xmin > avgleft-215 and xmin < avgleft-180) or (xmax > avgleft-215 and xmax < avgleft-180) or (xmid > avgleft-215 and xmid < avgleft-180)):
 					if (xwidth >= 45 and yheight >= 45):
@@ -3309,11 +3836,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3330,7 +3860,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdhigh > 1000:
 				markpos = pdhigh-520
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3385,11 +3919,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					continue
 
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3406,7 +3943,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdlow < 150:
 				markpos = pdlow
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3436,11 +3977,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3457,7 +4001,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdhigh > 1000:
 				markpos = pdhigh-520
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3485,11 +4033,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3506,7 +4057,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdhigh > 1000:
 				markpos = pdhigh-520
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3535,11 +4090,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					tempngboxlist.append(objbox)
 					continue
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3555,7 +4113,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdhigh > 1000:
 				markpos = pdhigh-520
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3605,11 +4167,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					continue
 
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3625,7 +4190,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdlow < 400:
 				markpos = pdlow+360
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3668,11 +4237,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					continue
 
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3688,7 +4260,11 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdlow < 120:
 				markpos = pdlow+730
 
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3738,11 +4314,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					continue
 
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3759,7 +4338,22 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 			if pdhigh > 850:
 				markpos = pdhigh-325
 
+
+			mdpadymax = -1
+			for pdbox in allpdboxlist:
+				pdymin1 = int(pdbox[0])
+				pdxmin1 = int(pdbox[1])
+				pdymax1 = int(pdbox[2])
+				pdxmax1 = int(pdbox[3])
+				if pdxmax1 < avgleft-150:
+					mdpadymax = pdymax1
+
+
+			idx = 0
 			for objbox in allngboxlist:
+				score = allngscorelist[idx]
+				idx = idx + 1
+
 				ymin = int(objbox[0])
 				xmin = int(objbox[1])
 				ymax = int(objbox[2])
@@ -3769,6 +4363,12 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 				xmid = (xmin+xmax)/2
 				ymid = (ymin+ymax)/2
 
+				if mdpadymax != -1:
+					if ymin >= mdpadymax:
+						continue
+					if xmid >= avgleft:
+						if ymid > mdpadymax -10:
+							continue
 
 				if (xmid > avgright+20 and xmid < avgright+100) and  (ymid > markpos+400 and ymid < markpos+570):
 					if (xwidth >= 45 and yheight >= 45):
@@ -3821,11 +4421,14 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					continue
 
 
-				if (xmid > avgleft-40 and xmid < avgright+60) and xwidth*yheight > minarea:
+				if (xmid > avgleft-40 and xmid < avgright+60) and (xwidth*yheight > minarea or (xwidth*yheight > minarea/2 and score > 0.95)):
 					if (xwidth >= 45 and yheight >= 45):
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,avgleft):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3880,6 +4483,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+			
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -3950,6 +4556,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -3998,6 +4607,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -4044,6 +4656,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -4103,6 +4718,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -4179,6 +4797,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -4247,6 +4868,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 					if CheckPadS(objbox,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
+
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
 
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
@@ -4330,6 +4954,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -4402,6 +5029,9 @@ def ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist):
 						tempngboxlist.append(objbox)
 						continue
 
+			if CheckRightPadTraceSize(boxlist,tempngboxlist,1000):
+				return {},mdrate,[]
+
 			if len(boxlist) > 0:
 				return output_dict,mdrate,boxlist
 			elif len(tempngboxlist) > 0:
@@ -4427,30 +5057,30 @@ def WaveGuide(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,filterversi
 		yheight = ymax-ymin
 		xmid = (xmin+xmax)/2
 		ymid = (ymin+ymax)/2
-		
-		if ((ymin > 80 and ymin < 240) or (ymax > 80 and ymax < 240) or (ymid > 80 and ymid < 240)):
-			if filterversion == 'V1':
-				if (xwidth >= 2.2*yheight and yheight <= 28 and xwidth >= 44 and score < 0.9):
-					continue
-				if (xwidth >= 2.2*yheight and yheight <= 19 and xwidth >= 38 and score < 0.9):
-					continue
+
+		# if ((ymin > 80 and ymin < 240) or (ymax > 80 and ymax < 240) or (ymid > 80 and ymid < 240)):
+		# 	if filterversion == 'V1':
+		# 		if (xwidth >= 2.2*yheight and yheight <= 28 and xwidth >= 44 and score < 0.9) and ymax < 230:
+		# 			continue
+		# 		if (xwidth >= 2.2*yheight and yheight <= 19 and xwidth >= 38 and score < 0.9) and ymax < 230:
+		# 			continue
 
 
-			if filterversion == 'V2':
-				if xwidth*yheight > 6000 and score < 0.51:
-					continue
-				if (xwidth >= 2.2*yheight and yheight <= 28 and xwidth >= 44 and score < 0.92):
-					continue
-				if (xwidth >= 2.2*yheight and yheight <= 19 and xwidth >= 38 and score < 0.92):
-					continue
+		# 	if filterversion == 'V2':
+		# 		if xwidth*yheight > 6000 and score < 0.51:
+		# 			continue
+		# 		if (xwidth >= 2.2*yheight and yheight <= 28 and xwidth >= 44 and score < 0.92) and ymax < 230:
+		# 			continue
+		# 		if (xwidth >= 2.2*yheight and yheight <= 19 and xwidth >= 38 and score < 0.92) and ymax < 230:
+		# 			continue
 
 
-		if ((ymin > 80 and ymin < 240) or (ymax > 80 and ymax < 240) or (ymid > 80 and ymid < 240)):
+		if ((ymin > 80 and ymin < 280) or (ymax > 80 and ymax < 280) or (ymid > 80 and ymid < 280)):
 			if '82_WAVEGUIDE' in imgpath:
 				if (xmid > 80 and xmid < 450) or (xmid > 850 and xmid < 1200):
 					boxlist.append(objbox)
 			elif '83_WAVEGUIDE' in imgpath or '84_WAVEGUIDE' in imgpath or '85_WAVEGUIDE' in imgpath or '86_WAVEGUIDE' in imgpath:
-				if (xmid > 450 and xmid < 850):
+				if (xmid > 430 and xmid < 870):
 					boxlist.append(objbox)
 			else:
 				boxlist.append(objbox)
@@ -4467,7 +5097,7 @@ def WaveGuide(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,filterversi
 	# elif '86_WAVEGUIDE' in imgpath:
 	return {},mdrate,[]
 
-def Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
+def Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate,allngscorelist):
 
 	boxlist = []
 	tempngboxlist = []
@@ -4494,8 +5124,11 @@ def Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 		avgwdymax = int(sumymax/sumcnt)
 
 	if avgwdymin != -1:
-
+		idx = 0
 		for objbox in allngboxlist:
+			score = allngscorelist[idx]
+			idx = idx + 1
+
 			ymin = int(objbox[0])
 			xmin = int(objbox[1])
 			ymax = int(objbox[2])
@@ -4512,6 +5145,8 @@ def Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 				wdxmax = int(wdbox[3])
 				if((ymin > wdymin and ymin < wdymax) or (ymax > wdymin and ymax < wdymax) or (ymid > wdymin and ymid < wdymax))  and ((xmin > wdxmin and xmin < wdxmax) or (xmax > wdxmin and xmax < wdxmax) or (xmid > wdxmin and xmid < wdxmax)):
 					if (xwidth >= 70 or yheight >= 70):
+						boxlist.append(objbox)
+					elif (xwidth >= 45 or yheight >= 45) and score > 0.985:
 						boxlist.append(objbox)
 					tempngboxlist.append(objbox)
 					break
@@ -4566,6 +5201,9 @@ def Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 					tempngboxlist.append(objbox)
 					continue
 
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,avgwdymax+70,1280,80):
+			return {},mdrate,[]
+
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
 		elif len(tempngboxlist) > 0:
@@ -4614,6 +5252,9 @@ def Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate):
 					boxlist.append(objbox)
 				tempngboxlist.append(objbox)
 				continue
+
+		if CheckUpDownTraceSize(boxlist,tempngboxlist,0,1280,80):
+			return {},mdrate,[]
 
 		if len(boxlist) > 0:
 			return output_dict,mdrate,boxlist
@@ -4665,7 +5306,7 @@ def GetOutPutDict(param,allscorelist1,output_dict1,allscorelist2,output_dict2,al
 	imgpath = param.rawpath.upper()
 
 	if '2_AROUNDWAVEGUIDE' in imgpath or '3_AROUNDWAVEGUIDE' in imgpath or '4_AROUNDWAVEGUIDE' in imgpath or '5_AROUNDWAVEGUIDE' in imgpath or '6_AROUNDWAVEGUIDE' in imgpath or '7_AROUNDWAVEGUIDE' in imgpath  or '8_AROUNDWAVEGUIDE' in imgpath:
-		return AroundWaveGuide(allngboxlist,output_dict,mdrate)
+		return AroundWaveGuide(imgpath,allngboxlist,output_dict,mdrate)
 	elif '11_METALTRACE' in imgpath or '12_METALTRACE' in imgpath or '13_METALTRACE' in imgpath or '14_METALTRACE' in imgpath or '15_METALTRACE' in imgpath or '16_METALTRACE' in imgpath  or '17_METALTRACE' in imgpath:
 		return MetalTrace1(allngboxlist,output_dict,mdrate)
 	elif '21_METALTRACE' in imgpath or '22_METALTRACE' in imgpath or '23_METALTRACE' in imgpath or '24_METALTRACE' in imgpath or '25_METALTRACE' in imgpath:
@@ -4679,19 +5320,19 @@ def GetOutPutDict(param,allscorelist1,output_dict1,allscorelist2,output_dict2,al
 	elif '_RXPADS_' in imgpath:
 		return RXPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist)
 	elif '_CONTROLPADS_' in imgpath:
-		return ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist)
+		return ControlPads(imgpath,allngboxlist,output_dict,mdrate,allpdboxlist,allngscorelist)
 	elif '_WAVEGUIDE_' in imgpath:
 		return WaveGuide(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,filterversion)
 	elif '_HEATER_' in imgpath:
-		return Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate)
+		return Heater(imgpath,allngboxlist,allwdboxlist,output_dict,mdrate,allngscorelist)
 
 	return {},mdrate,[]
-
 
 def run_model_waveguide(param):
 	try:
 		newimgpath = ''
 		cimg = None
+		cimgx = None
 
 		upperpath = param.rawpath.upper()
 		param.score = 0.4
@@ -4699,8 +5340,8 @@ def run_model_waveguide(param):
 
 		fileexist = os.path.exists(param.rawpath)
 		if fileexist:
-			cimg = cv2.imread(param.rawpath,cv2.IMREAD_COLOR)
-			cimg = cv2.resize(cimg,(WIDTH,HIGH))
+			cimgx = cv2.imread(param.rawpath,cv2.IMREAD_COLOR)
+			cimg = cv2.resize(cimgx,(WIDTH,HIGH))
 			cimg = CLAHE(cimg,2.1,16)
 			cimg = gamma_correction_lab(cimg,gamma)
 			newimgpath = SaveTobeImg(cimg,param)
@@ -4712,6 +5353,7 @@ def run_model_waveguide(param):
 				if tobexist:
 					newimgpath = param.tobepath
 					cimg = cv2.imread(param.tobepath,cv2.IMREAD_COLOR)
+					cimgx = cv2.resize(cimg,(2448,2048))
 				else:
 					return None
 			else:
@@ -4768,10 +5410,10 @@ def run_model_waveguide(param):
 
 					color = param.colors[clsidx%30]
 					bbox = output_dict['detection_boxes'][0][i]
-					drawtangle2(bbox,clsidx,cimg,color,tscore)
+					drawtangle2(bbox,clsidx,cimgx,color,tscore)
 
 
-		anlyzedpath = SaveAnalyzedImg(cimg,param,NGsubfix)
+		anlyzedpath = SaveAnalyzedImg(cimgx,param,NGsubfix)
 		return AOIRESTITEM(param.aoikey,param.pj,param.wafer,param.cellpos,newimgpath,anlyzedpath,AOIRest,maxscore,mdrate)
 
 	except:
@@ -4780,7 +5422,6 @@ def run_model_waveguide(param):
 		print(str(exception_message))
 		traceback.print_exc()
 		return None
-
 
 def MatchBox(objbox,output_dict,param):
 	for i in range(100):
@@ -4806,11 +5447,12 @@ def GetMatchOutputDict(boxlist,output_dict,output_dict1,output_dict2,output_dict
 	return output_dict
 
 
-def run_model(param):
-	try:
-		newimgpath = ''
-		cimg = None
+def ImagePrepare(param):
+	newimgpath = ''
+	cimg = None
+	cimgx = None
 
+	try:
 		upperpath = param.rawpath.upper()
 		gamma = 0.9
 
@@ -4818,47 +5460,65 @@ def run_model(param):
 			param.score = 0.4
 			gamma = 0.7
 
-		if '_MODULATOR_' in upperpath:
-			if '29_MODULATOR_' not in upperpath and '30_MODULATOR_' not in upperpath and '31_MODULATOR_' not in upperpath and '32_MODULATOR_' not in upperpath and '33_MODULATOR_' not in upperpath and '34_MODULATOR_' not in upperpath and '35_MODULATOR_' not in upperpath:
-				gamma = 1.1
-		if '74_MODULATORPADS_' in upperpath or '75_MODULATORPADS_' in upperpath or '76_MODULATORPADS_' in upperpath or '77_MODULATORPADS_' in upperpath or '78_MODULATORPADS_' in upperpath or '79_MODULATORPADS_' in upperpath or '80_MODULATORPADS_' in upperpath:
-			gamma = 1.1
-
 		fileexist = os.path.exists(param.rawpath)
 		if fileexist:
-			cimg = cv2.imread(param.rawpath,cv2.IMREAD_COLOR)
-			cimg = cv2.resize(cimg,(WIDTH,HIGH))
+			cimgx = cv2.imread(param.rawpath,cv2.IMREAD_COLOR)
+			cimg = cv2.resize(cimgx,(WIDTH,HIGH))
 			cimg = CLAHE(cimg,2.1,16)
 			cimg = gamma_correction_lab(cimg,gamma)
 
-			# if '_WAVEGUIDE_' in upperpath:
-			# 	cimg = cv2.detailEnhance(cimg)
-			# 	cimg = cv2.GaussianBlur(cimg, (3, 3), 0)
-
 			newimgpath = SaveTobeImg(cimg,param)
 			if newimgpath == '':
-				return None
+				return
 		else:
 			if param.tobepath != '':
 				tobexist =  os.path.exists(param.tobepath)
 				if tobexist:
 					newimgpath = param.tobepath
 					cimg = cv2.imread(param.tobepath,cv2.IMREAD_COLOR)
+					cimgx = cv2.resize(cimg,(2448,2048))
 				else:
-					return None
+					NoRAWImg(param)
+					return
 			else:
-				return None
+				NoRAWImg(param)
+				return
+
+		param.newimgpath = newimgpath
+		param.cimgx = cimgx
+		rgbimg = cv2.cvtColor(cimg,cv2.COLOR_BGR2RGB)
+		param.img_tensor = tf.convert_to_tensor(rgbimg,dtype=tf.float32)
+	except:
+		traceback.print_exc()
+	return
+
+
+def run_model(param):
+	try:
+		if param.newimgpath == '':
+			return None
+
+		upperpath = param.rawpath.upper()
+		if '_WAVEGUIDE_' in upperpath:
+			param.score = 0.4
+		
+		# img = tf.io.read_file(newimgpath)
+		# img_tensor = tf.io.decode_image(img, channels=3)
+
+		img_tensor = param.img_tensor
 
 		# input_image_size = (HIGH, WIDTH)
-		img = tf.io.read_file(newimgpath)
-		img_tensor = tf.io.decode_image(img, channels=3)
 		# img_tensor = tf.image.resize(img_tensor,input_image_size)
+
 		img_tensor = tf.expand_dims(img_tensor, axis=0)
 		img_tensor = tf.cast(img_tensor, dtype = tf.uint8)
 		
 		output_dict1 = param.model_fn(img_tensor)
 		output_dict2 = param.model_fn2(img_tensor)
 		output_dict3 = param.model_fn3(img_tensor)
+
+		del param.img_tensor
+		param.img_tensor = None
 
 		allpdboxlist80 = []
 		allpdboxlist90= []
@@ -4900,25 +5560,27 @@ def run_model(param):
 
 					color = param.colors[clsidx%30]
 					bbox = output_dict['detection_boxes'][0][i]
-					drawtangle2(bbox,clsidx,cimg,color,tscore)
+					drawtangle2(bbox,clsidx,param.cimgx,color,tscore)
 
-		if '_WAVEGUIDE_' in upperpath and AOIRest != 'FAIL':
-			return run_model_waveguide(param)
-		else:
-			anlyzedpath = SaveAnalyzedImg(cimg,param,NGsubfix)
-			return AOIRESTITEM(param.aoikey,param.pj,param.wafer,param.cellpos,newimgpath,anlyzedpath,AOIRest,maxscore,mdrate)
+		anlyzedpath = SaveAnalyzedImg(param.cimgx,param,NGsubfix)
+		del param.cimgx
+		param.cimgx = None
 
+		return AOIRESTITEM(param.aoikey,param.pj,param.wafer,param.cellpos,param.newimgpath,anlyzedpath,AOIRest,maxscore,mdrate)
 	except:
 		exception_message = sys.exc_info()[1]
 		print(param.rawpath)
 		print(str(exception_message))
+		if '!ssize.empty()' in str(exception_message):
+			NoRAWImg(param)
 		traceback.print_exc()
 		return None
 
 
+
 def StoreAOIResult(AOIRESTList):
 	try:
-		myclient = pymongo.MongoClient("mongodb://NPI:NPI%40NPI@cnwx-engsys02:27017/?directConnection=true&authSource=NPITrace")
+		myclient = pymongo.MongoClient(DBCONNECTSTR)
 		mydb = myclient["NPITrace"]
 		aoicol = mydb["PICDIEAOI"]
 		for item in AOIRESTList:
@@ -4931,55 +5593,102 @@ def StoreAOIResult(AOIRESTList):
 		print(str(exception_message))
 		time.sleep(5)
 
+def NoRAWImg(param):
+	try:
+		myclient = pymongo.MongoClient(DBCONNECTSTR)
+		mydb = myclient["NPITrace"]
+		aoicol = mydb["PICDIEAOI"]
+		query = {'_id':ObjectId(param.aoikey)}
+		setval = {'$set':{'Analyzed':2}}
+		aoicol.update_many(query,setval)
+	except:
+		print('a database except happend2.......')
+		exception_message = sys.exc_info()[1]
+		print(str(exception_message))
+		time.sleep(5)
+
+
+def SplitAOIList(lst,chunk_size=30):
+	return [lst[i:i+chunk_size] for i in range(0,len(lst),chunk_size)]
+
+def ImagePrepareParallel(chunck):
+	executor = ThreadPoolExecutor(4)
+	all_tasks = [executor.submit(ImagePrepare,param) for param in chunck]
+	wait(all_tasks,return_when=ALL_COMPLETED)
+
+
 def MainLoop():
-	
+
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--gpuid', type=str, help='gpu device id', required=True)
 	parser.add_argument('--modnum', type=int, help='mod number', required=True)
 	parser.add_argument('--runid', type=int, help='run id', required=True)
+	parser.add_argument('--modnum2', type=int, help='mod again num',default=0)
+	parser.add_argument('--runid2', type=int, help='mod again run id', default=0)
 	args = parser.parse_args()
 
-	print('python PICDIE_AOI  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid))
+	print('python PICDIE_AOIx.py  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid)+'  --modnum2  '+str(args.modnum2)+'  --runid2  '+str(args.runid2))
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid
 	gpus = tf.config.list_physical_devices('GPU')
-	tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=3*1024)])
+	tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=4*1024)])
 	logical_gpus = tf.config.list_logical_devices('GPU')
 	print(logical_gpus)
 
 	modnum = args.modnum	
 	myrunid = args.runid
 
+	modnum2 = args.modnum2
+	myrunid2 = args.runid2
+
 	with tf.device('/device:GPU:0'):
-		sleepbase = 2
+		sleepbase = 5
 		sleepidx = 1
 
 		while(True):
 			now = datetime.now()
 			nowtime = now.strftime("%Y-%m-%d %H:%M:%S")
 
-			print('python PICDIE_AOI  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid))
+			print('python PICDIE_AOIx.py  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid)+'  --modnum2  '+str(args.modnum2)+'  --runid2  '+str(args.runid2))
 			print('loading to be analyzed SWD AOI data................'+nowtime)
 
-			AOIItemList = GetAOIItems(modnum,myrunid)
+			AOIItemList = GetAOIItems(modnum,myrunid,modnum2,myrunid2)
 
 			paramlistlen = len(AOIItemList)
 			print('the  SWD AOI list count is '+str(paramlistlen))
 
-			if paramlistlen == 0 and sleepidx < 30:
+			if paramlistlen == 0 and sleepidx < 12:
 				sleepidx = sleepidx + 1
 			if paramlistlen > 0:
 				sleepidx = 1
 
+			prevtime = datetime.now()
+			solved = 0
 			AOIRESTList = []
-			for param in AOIItemList:
-				rest = run_model(param)
-				if rest != None:
-					AOIRESTList.append(rest)
+			AOIChuncks = SplitAOIList(AOIItemList)
+			for chunck in AOIChuncks:
+				ImagePrepareParallel(chunck)
+				for param in chunck:
+					rest = run_model(param)
+					if rest != None:
+						AOIRESTList.append(rest)
 
-				if len(AOIRESTList) == 10:
-					StoreAOIResult(AOIRESTList)
-					AOIRESTList = []
+					if len(AOIRESTList) == 10:
+						StoreAOIResult(AOIRESTList)
+						AOIRESTList = []
+						gc.collect()
+
+						solved = solved+10
+						if solved%200 == 0:
+							print('python PICDIE_AOIx.py  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid)+'  --modnum2  '+str(args.modnum2)+'  --runid2  '+str(args.runid2))
+							now = datetime.now()
+							nowtime = now.strftime("%Y-%m-%d %H:%M:%S")
+							print('to be analyzed AOI data is '+str(paramlistlen-solved)+'................'+nowtime)
+
+							timespan = (now-prevtime).seconds
+							if timespan > 1800:
+								print("WARNING: the network seems have problem, it spend "+str(timespan)+" seconds to complete 1000 tasks")
+							prevtime = datetime.now()
 
 			if len(AOIRESTList) > 0:
 				StoreAOIResult(AOIRESTList)
