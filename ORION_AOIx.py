@@ -67,7 +67,9 @@ def random_colors(N, bright=True):
 def  getPICDIEModel():
 	PICDIEMODEL='PICDIEMODEL'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8542xxxxx0'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8526xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
 		# export_dir = './AOI/PIC_AOI/exported_model_OR_8364xxx'
 		#export_dir = './AOI/PIC_AOI/exported_model_OR_8339xxx0'
 
@@ -82,7 +84,9 @@ def  getPICDIEModel():
 def  getPICDIEModel2():
 	PICDIEMODEL='PICDIEMODEL2'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8495xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8552xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_OR_8352xxx0'
 
 
@@ -96,7 +100,10 @@ def  getPICDIEModel2():
 def  getPICDIEModel3():
 	PICDIEMODEL='PICDIEMODEL3'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8528xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8529xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8538xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_OR_8359xxx1'
 
 
@@ -396,7 +403,7 @@ def SaveAnalyzedImg(cimg,param,NGsubfix):
 	# 	return ''
 
 	try:
-		newimgpath = rawpath+'\\'+param.cellpos+'_'+fn
+		newimgpath = rawpath+'\\'+param.cellpos+'_'+fn.lower()
 		newimgpath = newimgpath.replace(".jpg",NGsubfix)
 		cv2.imwrite(newimgpath,cimg)
 		return newimgpath
@@ -2204,6 +2211,7 @@ def ImagePrepare(param):
 		rgbimg = cv2.cvtColor(cimg,cv2.COLOR_BGR2RGB)
 		param.img_tensor = tf.convert_to_tensor(rgbimg,dtype=tf.float32)
 	except:
+		NoRAWImg(param)
 		traceback.print_exc()
 	return
 
@@ -2354,7 +2362,7 @@ def MainLoop():
 	myrunid2 = args.runid2
 
 	with tf.device('/device:GPU:0'):
-		sleepbase = 2
+		sleepbase = 5
 		sleepidx = 1
 
 		while(True):
@@ -2369,7 +2377,7 @@ def MainLoop():
 			paramlistlen = len(AOIItemList)
 			print('the  SWD AOI list count is '+str(paramlistlen))
 
-			if paramlistlen == 0 and sleepidx < 30:
+			if paramlistlen == 0 and sleepidx < 12:
 				sleepidx = sleepidx + 1
 			if paramlistlen > 0:
 				sleepidx = 1

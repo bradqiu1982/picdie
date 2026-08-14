@@ -67,7 +67,9 @@ def random_colors(N, bright=True):
 def  getPICDIEModel():
 	PICDIEMODEL='PICDIEMODEL'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8542xxxxx0'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8526xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
 		# export_dir = './AOI/PIC_AOI/exported_model_OR_8364xxx'
 		#export_dir = './AOI/PIC_AOI/exported_model_OR_8339xxx0'
 
@@ -82,7 +84,9 @@ def  getPICDIEModel():
 def  getPICDIEModel2():
 	PICDIEMODEL='PICDIEMODEL2'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8495xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8552xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_OR_8352xxx0'
 
 
@@ -96,7 +100,10 @@ def  getPICDIEModel2():
 def  getPICDIEModel3():
 	PICDIEMODEL='PICDIEMODEL3'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8528xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8529xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8538xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_OR_8359xxx1'
 
 
@@ -169,17 +176,18 @@ def GetAOIItems(modnum,myrunid,modnum2,myrunid2):
 	colors = random_colors(30)
 	model_fn = getPICDIEModel()
 	model_fn2 = getPICDIEModel2()
-	model_fn3 = getPICDIEModel3()
+	# model_fn3 = getPICDIEModel3()
+	model_fn3 = None
 
 	AOIItemList = []
 	try:
-		start_date = datetime.utcnow() - timedelta(days=14)
-		# start_date = datetime(2025, 6, 30, 0, 0, 0, 0)
+		#start_date = datetime.utcnow() - timedelta(days=2)
+		start_date = datetime(2026, 8, 6, 0, 0, 0, 0)
 		myclient = pymongo.MongoClient(DBCONNECTSTR)
 		mydb = myclient["NPITrace"]
 
 		piccol = mydb["PICVM"]
-		query = {'$and':[{'Project':'800G_DR8_SiPh'},{'TestTime':{'$gte':start_date}},{'DieImgCnt':87},{'SKAnalyzed':0}]}
+		query = {'$and':[{'Project':'800G_DR8_SiPh'},{'TestTime':{'$gte':start_date}},{'DieImgCnt':{'$gte':87}},{'SKAnalyzed':0}]}
 		waferlist = piccol.distinct('Wafer',query)
 
 		aoicol = mydb["PICDIEAOI"]
@@ -208,6 +216,9 @@ def GetAOIItems(modnum,myrunid,modnum2,myrunid2):
 		time.sleep(5)
 		
 	AOIItemList.sort(key=lambda x: x.uptime)
+	if len(AOIItemList) > 30000:
+		AOIItemList = AOIItemList[:30000]
+
 	return AOIItemList
 
 
@@ -390,7 +401,7 @@ def SaveAnalyzedImg(cimg,param,NGsubfix):
 	# 	return ''
 
 	try:
-		newimgpath = rawpath+'\\'+param.cellpos+'_'+fn
+		newimgpath = rawpath+'\\'+param.cellpos+'_'+fn.lower()
 		newimgpath = newimgpath.replace(".jpg",NGsubfix)
 		cv2.imwrite(newimgpath,cimg)
 		return newimgpath
@@ -545,7 +556,7 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 						continue
 
 				if ymid > 460:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -554,10 +565,14 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 
 			if xmid > 350 and xmid < 860:
 				if ymid < 750:
-					if ymid > 300 and ymid < 400:
+					if ymid > 300 and ymid < 450:
 						if xwidth > 55 or yheight > 55:
 							boxlist.append(objbox)
 							continue
+						if xmid > 720 and xmid < 860:
+							if xwidth > 40 or yheight > 40:
+								boxlist.append(objbox)
+								continue
 
 					if xwidth >= 50 and yheight >= 50:
 						boxlist.append(objbox)
@@ -570,9 +585,10 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 		elif '2_AROUNDWAVEGUIDE' in imgpath or '3_AROUNDWAVEGUIDE' in imgpath or '4_AROUNDWAVEGUIDE' in imgpath:
 
 			if ymid > 250 and ymid < 400:
-				if xwidth >= 20 or yheight >= 20:
+				if xwidth >= 18 or yheight >= 18:
 					boxlist.append(objbox)
 					continue
+
 
 			if ymid > 200 and ymid < 460:
 				if xwidth > 20 and yheight > 20:
@@ -583,7 +599,7 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 						continue
 
 			if ymid > 460 and ymid < 750 :
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -591,7 +607,7 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 
 			if  '4_AROUNDWAVEGUIDE' in imgpath and ymid > 1000:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -614,12 +630,12 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 							continue
 
 			if xmid > 800 and ymid > 250 and ymid < 410:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 
 			if xmid < 290:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 
@@ -628,7 +644,7 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 
 			if ymid > 1040:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -656,12 +672,12 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 							continue
 
 			if xmid > 520 and ymid > 250 and ymid < 410:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 
-			if  ymid > 1040:
-				if xwidth > 39 or yheight > 39:
+			if  ymid > 980:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -669,7 +685,7 @@ def AROUNDWAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 		else:
 			if (ymid > 700 and ymid < 900) or ymid > 1000:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -713,7 +729,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 		if '11_METALTRACE' in imgpath:
 			#in upper
 			if ymid < 210:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -721,7 +737,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 			#right
 			if xmid > 1000:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -730,7 +746,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 
 			#in middle
 			if ymid > 420 and ymid < 865:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -738,7 +754,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 			#bottom
 			if ymid > 1200:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -754,7 +770,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					boxlist.append(objbox)
 					continue
 			if xmid > 860:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -768,7 +784,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 
 			#in upper
 			if ymid < 220:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -776,7 +792,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 			#middle
 			if ymid > 420 and ymid < 865:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -784,7 +800,7 @@ def METALTRACE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					continue
 			#bottom
 			if ymid > 1200:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 18 or yheight >= 18:
@@ -865,7 +881,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 						continue
 				#right
 				if xmid > leftwd-30:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -910,7 +926,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 							tempngboxlist.append(objbox)
 							continue
 					else:
-						if xwidth > 39 or yheight > 39:
+						if xwidth >= 38 or yheight >= 38:
 							boxlist.append(objbox)
 							continue
 						if xwidth >= 20 or yheight >= 20:
@@ -919,7 +935,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in upper
 				if ymid < avgwdymin-300:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -928,7 +944,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in middle
 				if ymid > avgwdymax+50 and ymid < avgwdymax+270:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -975,7 +991,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in upper
 				if ymin < avgwdymin-275:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -984,7 +1000,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in middle
 				if ymid > avgwdymax+50 and ymid < avgwdymax+270:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1001,7 +1017,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 							tempngboxlist.append(objbox)
 							continue
 					else:
-						if xwidth > 39 or yheight > 39:
+						if xwidth >= 38 or yheight >= 38:
 							boxlist.append(objbox)
 							continue
 						if xwidth >= 20 or yheight >= 20:
@@ -1045,7 +1061,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in upper
 				if ymin < avgwdymin-240:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1054,7 +1070,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in middle
 				if ymid > avgwdymax+50 and ymid < avgwdymax+270:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1071,7 +1087,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 							tempngboxlist.append(objbox)
 							continue
 					else:
-						if xwidth > 39 or yheight > 39:
+						if xwidth >= 38 or yheight >= 38:
 							boxlist.append(objbox)
 							continue
 						if xwidth >= 20 or yheight >= 20:
@@ -1109,7 +1125,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in upper
 				if ymin < avgwdymin-145:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1118,7 +1134,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in middle
 				if ymid > avgwdymax+50 and ymid < avgwdymax+270:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1135,7 +1151,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 							tempngboxlist.append(objbox)
 							continue
 					else:
-						if xwidth > 39 or yheight > 39:
+						if xwidth >= 38 or yheight >= 38:
 							boxlist.append(objbox)
 							continue
 						if xwidth >= 20 or yheight >= 20:
@@ -1169,7 +1185,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in upper
 				if ymin < avgwdymin-200:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1178,7 +1194,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 
 				#in middle
 				if ymid > avgwdymax+50 and ymid < avgwdymax+270:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1195,7 +1211,7 @@ def MODULATORHEATER(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allwd
 							tempngboxlist.append(objbox)
 							continue
 					else:
-						if xwidth > 39 or yheight > 39:
+						if xwidth >= 38 or yheight >= 38:
 							boxlist.append(objbox)
 							continue
 						if xwidth >= 20 or yheight >= 20:
@@ -1307,7 +1323,7 @@ def MODULATOR(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 					tempngboxlist.append(objbox)
 					continue
 			if xmid > 820:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -1386,10 +1402,26 @@ def MODULATORPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdbo
 	avgpdymin = -1
 	avgpdymax = -1
 
+	padxmids = []
 	for pdbox in allpdboxlist:
 		sumymin = sumymin+int(pdbox[0])
 		sumymax = sumymax+int(pdbox[2])
 		sumcnt = sumcnt+1
+
+		pdwidth,pdheight = rawWH(pdbox)
+		if pdwidth > 120:
+			xmin = int(pdbox[1])
+			xmax = int(pdbox[3])
+			xmid = (xmin+xmax)/2
+			if len(padxmids) == 0:
+				padxmids.append(xmid)
+			elif len(padxmids) == 1:
+				paddis = xmid - padxmids[0]
+				if paddis < 0:
+					paddis = 0 - paddis
+				if paddis > 300 and paddis < 400:
+					padxmids.append(xmid)
+
 
 	if sumcnt != 0:
 		avgpdymin = int(sumymin/sumcnt)
@@ -1449,6 +1481,12 @@ def MODULATORPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdbo
 				leftbond0 = 1025
 			rightbond0 = leftbond0+420
 
+			if len(padxmids) == 2:
+				if '65_MODULATORPADS'  in imgpath or '66_MODULATORPADS'  in imgpath or '67_MODULATORPADS'  in imgpath or '68_MODULATORPADS'  in imgpath or '69_MODULATORPADS'  in imgpath:
+					xbaseline = (padxmids[0]+padxmids[1])/2
+					leftbond0 = xbaseline - 210
+					rightbond0 = leftbond0+420
+
 			#in upper
 			if ymid < avgpdymin - 225:
 
@@ -1467,7 +1505,7 @@ def MODULATORPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdbo
 
 			#in middle
 			if ymid >= avgpdymin - 225 and ymid <= avgpdymax:
-				if xwidth > 39 or yheight > 39:
+				if xwidth >= 38 or yheight >= 38:
 					boxlist.append(objbox)
 					continue
 				if xwidth >= 20 or yheight >= 20:
@@ -1647,7 +1685,7 @@ def CONTROLPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdboxl
 
 				#left bottom
 				if ymid > padhead-70 and xmid < avgleft:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1656,7 +1694,7 @@ def CONTROLPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdboxl
 
 				#on pad
 				if xmid > avgleft-30 and xmid < avgright+30 and ymid > padhead-30 and ymid < padbtm+30:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1716,7 +1754,7 @@ def CONTROLPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdboxl
 
 				#in pad
 				if xmid > avgleft-30 and xmid < avgright+30 and ymid > padhead-30 and ymid < padbtm+30:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1725,7 +1763,7 @@ def CONTROLPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdboxl
 
 				#left bottom
 				if xmid < avgleft-350 and ymid > padbtm+150 and ymid < padbtm+430:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1781,7 +1819,7 @@ def CONTROLPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdboxl
 
 				#on pad
 				if xmid > avgleft-30 and xmid < avgright+30:
-					if (xwidth > 39 or yheight > 39) and yheight > 12:
+					if (xwidth >= 38 or yheight >= 38) and yheight > 12:
 						boxlist.append(objbox)
 						continue
 					if (xwidth >= 20 or yheight >= 20) and yheight > 12:
@@ -1790,7 +1828,7 @@ def CONTROLPADS(imgpath,allngboxlist,output_dict,mdrate,allngscorelist,allpdboxl
 
 				#left
 				if xmid < avgleft-30:
-					if xwidth > 39 or yheight > 39:
+					if xwidth >= 38 or yheight >= 38:
 						boxlist.append(objbox)
 						continue
 					if xwidth >= 20 or yheight >= 20:
@@ -1895,26 +1933,26 @@ def WAVEGUIDE(imgpath,allngboxlist,output_dict,mdrate,allngscorelist):
 		xwidth,yheight = rawWH(objbox)
 		if '73_WAVEGUIDE' in imgpath or '75_WAVEGUIDE' in imgpath or '77_WAVEGUIDE' in imgpath :
 			if xmid < 480 or xmid > 760:
-				if ymid < 450:
+				if ymid < 460:
 					boxlist.append(objbox)
 					continue
 		elif '74_WAVEGUIDE' in imgpath or '76_WAVEGUIDE' in imgpath:
 			if (xmid > 380 and xmid < 860) or xmid > 1150:
-				if ymid < 450:
+				if ymid < 460:
 					boxlist.append(objbox)
 					continue
 		elif '78_WAVEGUIDE' in imgpath:
 			if  xmid < 500:
-				if ymid < 450:
+				if ymid < 460:
 					boxlist.append(objbox)
 					continue
 		elif '79_WAVEGUIDE' in imgpath:
 			if xmid > 260 and xmid < 960:
-				if ymid < 450:
+				if ymid < 460:
 					boxlist.append(objbox)
 					continue
 		else:
-			if ymid < 450:
+			if ymid < 460:
 				boxlist.append(objbox)
 				continue
 
@@ -2150,8 +2188,8 @@ def GetMatchOutputDict(boxlist,output_dict,output_dict1,output_dict2,output_dict
 			return output_dict1
 		if MatchBox(objbox,output_dict2,param):
 			return output_dict2
-		if MatchBox(objbox,output_dict3,param):
-			return output_dict3
+		# if MatchBox(objbox,output_dict3,param):
+		# 	return output_dict3
 	return output_dict
 
 
@@ -2198,6 +2236,7 @@ def ImagePrepare(param):
 		rgbimg = cv2.cvtColor(cimg,cv2.COLOR_BGR2RGB)
 		param.img_tensor = tf.convert_to_tensor(rgbimg,dtype=tf.float32)
 	except:
+		NoRAWImg(param)
 		traceback.print_exc()
 	return
 
@@ -2224,7 +2263,8 @@ def run_model(param):
 		
 		output_dict1 = param.model_fn(img_tensor)
 		output_dict2 = param.model_fn2(img_tensor)
-		output_dict3 = param.model_fn3(img_tensor)
+		# output_dict3 = param.model_fn3(img_tensor)
+		output_dict3=[]
 
 		del param.img_tensor
 		param.img_tensor = None
@@ -2238,7 +2278,8 @@ def run_model(param):
 
 		allscorelist1 = GetObjectList(output_dict1,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
 		allscorelist2 = GetObjectList(output_dict2,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
-		allscorelist3 = GetObjectList(output_dict3,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
+		# allscorelist3 = GetObjectList(output_dict3,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
+		allscorelist3=[]
 		
 		allwdboxlist = allwdboxlist80
 		if len(allwdboxlist90) > 0:
@@ -2315,7 +2356,7 @@ def NoRAWImg(param):
 		print(str(exception_message))
 		time.sleep(5)
 
-def SplitAOIList(lst,chunk_size=30):
+def SplitAOIList(lst,chunk_size=50):
 	return [lst[i:i+chunk_size] for i in range(0,len(lst),chunk_size)]
 
 def ImagePrepareParallel(chunck):
@@ -2337,18 +2378,18 @@ def MainLoop():
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid
 	gpus = tf.config.list_physical_devices('GPU')
-	tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=4*1024)])
+	tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=6.5*1024)])
 	logical_gpus = tf.config.list_logical_devices('GPU')
 	print(logical_gpus)
 
-	modnum = args.modnum	
+	modnum = args.modnum
 	myrunid = args.runid
 
 	modnum2 = args.modnum2
 	myrunid2 = args.runid2
 
 	with tf.device('/device:GPU:0'):
-		sleepbase = 2
+		sleepbase = 5
 		sleepidx = 1
 
 		while(True):
@@ -2363,7 +2404,7 @@ def MainLoop():
 			paramlistlen = len(AOIItemList)
 			print('the  SWD AOI list count is '+str(paramlistlen))
 
-			if paramlistlen == 0 and sleepidx < 30:
+			if paramlistlen == 0 and sleepidx < 12:
 				sleepidx = sleepidx + 1
 			if paramlistlen > 0:
 				sleepidx = 1
@@ -2376,6 +2417,7 @@ def MainLoop():
 			for chunck in AOIChuncks:
 				ImagePrepareParallel(chunck)
 				for param in chunck:
+					paramdate = param.uptime.strftime("%Y-%m-%d %H:%M:%S")
 					rest = run_model(param)
 					if rest != None:
 						AOIRESTList.append(rest)
@@ -2390,7 +2432,7 @@ def MainLoop():
 							print('python ORION_AOI.py  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid)+'  --modnum2  '+str(args.modnum2)+'  --runid2  '+str(args.runid2))
 							now = datetime.now()
 							nowtime = now.strftime("%Y-%m-%d %H:%M:%S")
-							print('to be analyzed AOI data is '+str(paramlistlen-solved)+'................'+nowtime)
+							print('to be analyzed AOI data is '+str(paramlistlen-solved)+'....param date '+paramdate+'.....TS..'+nowtime)
 
 							timespan = (now-prevtime).seconds
 							if timespan > 2700:

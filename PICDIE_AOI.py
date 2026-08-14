@@ -66,7 +66,9 @@ def random_colors(N, bright=True):
 def  getPICDIEModel():
 	PICDIEMODEL='PICDIEMODEL'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8542xxxxx0'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8526xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8484xxxx1'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8218xxxxxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_7975xxxxxx0'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8084xxxxxx'
@@ -82,7 +84,10 @@ def  getPICDIEModel():
 def  getPICDIEModel2():
 	PICDIEMODEL='PICDIEMODEL2'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8495xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8528xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8529xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8487xxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8232xxxxxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8009xxxxxx'
 		#export_dir = './AOI/PIC_AOI/exported_model_B91_7925xxxxx'
@@ -98,7 +103,9 @@ def  getPICDIEModel2():
 def  getPICDIEModel3():
 	PICDIEMODEL='PICDIEMODEL3'
 	if PICDIEMODEL not in cache:
-		export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
+		export_dir = './AOI/PIC_AOI/exported_model_OR_8552xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_8538xxxxx'
+		# export_dir = './AOI/PIC_AOI/exported_model_OR_850xxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8236xxxxxxx0'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8003xxxxxx'
 		# export_dir = './AOI/PIC_AOI/exported_model_B91_8012xxxxxx'
@@ -173,11 +180,12 @@ def GetAOIItems(modnum,myrunid,modnum2,myrunid2):
 	colors = random_colors(30)
 	model_fn = getPICDIEModel()
 	model_fn2 = getPICDIEModel2()
-	model_fn3 = getPICDIEModel3()
+	# model_fn3 = getPICDIEModel3()
+	model_fn3 = None
 
 	AOIItemList = []
 	try:
-		start_date = datetime.utcnow() - timedelta(days=10)
+		start_date = datetime.utcnow() - timedelta(days=15)
 		# start_date = datetime(2025, 6, 30, 0, 0, 0, 0)
 		myclient = pymongo.MongoClient(DBCONNECTSTR)
 		mydb = myclient["NPITrace"]
@@ -195,7 +203,7 @@ def GetAOIItems(modnum,myrunid,modnum2,myrunid2):
 				runid = getRunID(cellpos,modnum)
 				if runid != myrunid:
 					continue
-				if len(x['Wafer']) > 14:
+				if len(x['Wafer']) > 14 or len(x['Wafer']) < 12:
 					continue
 
 				if modnum2 != 0:
@@ -210,6 +218,8 @@ def GetAOIItems(modnum,myrunid,modnum2,myrunid2):
 		time.sleep(5)
 		
 	AOIItemList.sort(key=lambda x: x.uptime)
+	if len(AOIItemList) > 30000:
+		AOIItemList = AOIItemList[:30000]
 	return AOIItemList
 
 
@@ -5321,101 +5331,6 @@ def GetOutPutDict(param,allscorelist1,output_dict1,allscorelist2,output_dict2,al
 
 	return {},mdrate,[]
 
-def run_model_waveguide(param):
-	try:
-		newimgpath = ''
-		cimg = None
-		cimgx = None
-
-		upperpath = param.rawpath.upper()
-		param.score = 0.4
-		gamma = 1.1
-
-		fileexist = os.path.exists(param.rawpath)
-		if fileexist:
-			cimgx = cv2.imread(param.rawpath,cv2.IMREAD_COLOR)
-			cimg = cv2.resize(cimgx,(WIDTH,HIGH))
-			cimg = CLAHE(cimg,2.1,16)
-			cimg = gamma_correction_lab(cimg,gamma)
-			newimgpath = SaveTobeImg(cimg,param)
-			if newimgpath == '':
-				return None
-		else:
-			if param.tobepath != '':
-				tobexist =  os.path.exists(param.tobepath)
-				if tobexist:
-					newimgpath = param.tobepath
-					cimg = cv2.imread(param.tobepath,cv2.IMREAD_COLOR)
-					cimgx = cv2.resize(cimg,(2448,2048))
-				else:
-					return None
-			else:
-				return None
-
-		# input_image_size = (HIGH, WIDTH)
-		img = tf.io.read_file(newimgpath)
-		img_tensor = tf.io.decode_image(img, channels=3)
-		# img_tensor = tf.image.resize(img_tensor,input_image_size)
-		img_tensor = tf.expand_dims(img_tensor, axis=0)
-		img_tensor = tf.cast(img_tensor, dtype = tf.uint8)
-		
-		output_dict1 = param.model_fn(img_tensor)
-		output_dict2 = param.model_fn2(img_tensor)
-		output_dict3 = param.model_fn3(img_tensor)
-
-		allpdboxlist80 = []
-		allpdboxlist90= []
-		allwdboxlist80 = []
-		allwdboxlist90 = []
-		allngboxlist = []
-		allngscorelist = []
-
-		allscorelist1 = GetObjectList(output_dict1,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
-		allscorelist2 = GetObjectList(output_dict2,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
-		allscorelist3 = GetObjectList(output_dict3,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
-		
-		allwdboxlist = allwdboxlist80
-		if len(allwdboxlist90) > 0:
-			allwdboxlist = allwdboxlist90
-		
-		allpdboxlist = allpdboxlist80
-		if len(allpdboxlist90) > 0:
-			allpdboxlist = allpdboxlist90
-
-		output_dict,mdrate,boxlist = GetOutPutDict(param,allscorelist1,output_dict1,allscorelist2,output_dict2,allscorelist3,output_dict3,allngboxlist,allpdboxlist,allwdboxlist,allngscorelist,'V2')
-		if 'detection_scores' in output_dict and len(boxlist) > 0:
-			output_dict = GetMatchOutputDict(boxlist,output_dict,output_dict1,output_dict2,output_dict3,param)
-
-		maxscore = 0
-		NGsubfix = '.jpg'
-		AOIRest = 'PASS'
-		if 'detection_scores' in output_dict:
-			for i in range(100):
-				if float(output_dict['detection_scores'][0][i]) >= param.score:
-					clsidx = int(output_dict['detection_classes'][0][i]) - 1
-					tscore = round(100.0*float(output_dict['detection_scores'][0][i]),2)
-
-					if clsidx == 0:
-						AOIRest = 'FAIL'
-						NGsubfix = '_NG.jpg'
-						if int(tscore) > maxscore:
-							maxscore = int(tscore)
-
-					color = param.colors[clsidx%30]
-					bbox = output_dict['detection_boxes'][0][i]
-					drawtangle2(bbox,clsidx,cimgx,color,tscore)
-
-
-		anlyzedpath = SaveAnalyzedImg(cimgx,param,NGsubfix)
-		return AOIRESTITEM(param.aoikey,param.pj,param.wafer,param.cellpos,newimgpath,anlyzedpath,AOIRest,maxscore,mdrate)
-
-	except:
-		exception_message = sys.exc_info()[1]
-		print(param.rawpath)
-		print(str(exception_message))
-		traceback.print_exc()
-		return None
-
 def MatchBox(objbox,output_dict,param):
 	for i in range(100):
 		if float(output_dict['detection_scores'][0][i]) >= param.score:
@@ -5435,8 +5350,8 @@ def GetMatchOutputDict(boxlist,output_dict,output_dict1,output_dict2,output_dict
 			return output_dict1
 		if MatchBox(objbox,output_dict2,param):
 			return output_dict2
-		if MatchBox(objbox,output_dict3,param):
-			return output_dict3
+		# if MatchBox(objbox,output_dict3,param):
+		# 	return output_dict3
 	return output_dict
 
 
@@ -5509,7 +5424,8 @@ def run_model(param):
 		
 		output_dict1 = param.model_fn(img_tensor)
 		output_dict2 = param.model_fn2(img_tensor)
-		output_dict3 = param.model_fn3(img_tensor)
+		# output_dict3 = param.model_fn3(img_tensor)
+		output_dict3=[]
 
 		del param.img_tensor
 		param.img_tensor = None
@@ -5523,7 +5439,8 @@ def run_model(param):
 
 		allscorelist1 = GetObjectList(output_dict1,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
 		allscorelist2 = GetObjectList(output_dict2,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
-		allscorelist3 = GetObjectList(output_dict3,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
+		# allscorelist3 = GetObjectList(output_dict3,param.score,allngboxlist,allpdboxlist80,allpdboxlist90,allwdboxlist80,allwdboxlist90,allngscorelist)
+		allscorelist3=[]
 		
 		allwdboxlist = allwdboxlist80
 		if len(allwdboxlist90) > 0:
@@ -5602,7 +5519,7 @@ def NoRAWImg(param):
 		time.sleep(5)
 
 
-def SplitAOIList(lst,chunk_size=30):
+def SplitAOIList(lst,chunk_size=50):
 	return [lst[i:i+chunk_size] for i in range(0,len(lst),chunk_size)]
 
 def ImagePrepareParallel(chunck):
@@ -5625,11 +5542,11 @@ def MainLoop():
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid
 	gpus = tf.config.list_physical_devices('GPU')
-	tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=4.5*1024)])
+	tf.config.set_logical_device_configuration(gpus[0], [tf.config.LogicalDeviceConfiguration(memory_limit=6.5*1024)])
 	logical_gpus = tf.config.list_logical_devices('GPU')
 	print(logical_gpus)
 
-	modnum = args.modnum	
+	modnum = args.modnum
 	myrunid = args.runid
 
 	modnum2 = args.modnum2
@@ -5663,6 +5580,7 @@ def MainLoop():
 			for chunck in AOIChuncks:
 				ImagePrepareParallel(chunck)
 				for param in chunck:
+					paramdate = param.uptime.strftime("%Y-%m-%d %H:%M:%S")
 					rest = run_model(param)
 					if rest != None:
 						AOIRESTList.append(rest)
@@ -5677,7 +5595,7 @@ def MainLoop():
 							print('python PICDIE_AOI.py  --gpuid  '+args.gpuid+'  --modnum  '+str(args.modnum)+'  --runid  '+str(args.runid)+'  --modnum2  '+str(args.modnum2)+'  --runid2  '+str(args.runid2))
 							now = datetime.now()
 							nowtime = now.strftime("%Y-%m-%d %H:%M:%S")
-							print('to be analyzed AOI data is '+str(paramlistlen-solved)+'................'+nowtime)
+							print('to be analyzed AOI data is '+str(paramlistlen-solved)+'....param date '+paramdate+'.....TS..'+nowtime)
 
 							timespan = (now-prevtime).seconds
 							if timespan > 2700:
